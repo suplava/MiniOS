@@ -1,5 +1,5 @@
-#ifndef SHELL_H
-#define SHELL_H
+#ifndef MINIOS_SHELL_H
+#define MINIOS_SHELL_H
 
 void shell_start(void);
 
