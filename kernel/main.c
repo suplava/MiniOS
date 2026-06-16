@@ -7,6 +7,7 @@
 #include "process.h"
 #include "ramfs.h"
 #include "shell.h"
+#include "test.h"
 
 int kernel_main(void) {
     console_init();
@@ -20,6 +21,9 @@ int kernel_main(void) {
 
     memory_init();
     process_init();
+
+    kernel_test();
+
     ramfs_init();
 
     shell_start();

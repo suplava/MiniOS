@@ -1,6 +1,6 @@
 {
     "code-runner.executorMap": {
-        "c": "cd $workspaceRoot && gcc -Wall -Wextra -g3 -Iinclude kernel/main.c kernel/console.c kernel/trap.c kernel/timer.c kernel/syscall.c kernel/memory.c kernel/process.c kernel/ramfs.c kernel/shell.c kernel/sched.c -o minios.exe && ./minios.exe"
+        "c": "cd $workspaceRoot && gcc -Wall -Wextra -g3 -Iinclude kernel/main.c kernel/console.c kernel/trap.c kernel/timer.c kernel/syscall.c kernel/memory.c kernel/process.c kernel/ramfs.c kernel/shell.c kernel/sched.c kernel/test.c -o minios.exe && ./minios.exe"
     },
     "code-runner.runInTerminal": true,
     "code-runner.saveFileBeforeRun": true,
@@ -18,7 +18,8 @@
         "kernel/process.c",
         "kernel/ramfs.c",
         "kernel/shell.c",
-        "kernel/sched.c"
+        "kernel/sched.c",
+        "kernel/test.c"
     ],
     "c-cpp-runner.cpp.output": "${workspaceFolder}/minios.exe"
 }

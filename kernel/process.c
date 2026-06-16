@@ -49,7 +49,8 @@ int process_create(const char *name) {
     }
 
     for (int i = 0; i < MAX_PROCESSES; i++) {
-        if (process_table[i].state == PROC_UNUSED) {
+        if (process_table[i].state == PROC_UNUSED ||
+            process_table[i].state == PROC_ZOMBIE) {
             process_table[i].pid = next_pid++;
 
             strncpy(process_table[i].name, name, PROCESS_NAME_LEN - 1);

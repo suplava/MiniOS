@@ -10,7 +10,8 @@ SRC = kernel/main.c \
       kernel/memory.c \
       kernel/process.c \
       kernel/ramfs.c \
-      kernel/shell.c
+      kernel/shell.c \
+      kernel/test.c
 
 all: $(TARGET)
 
