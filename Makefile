@@ -9,6 +9,8 @@ SRC = kernel/main.c \
       kernel/syscall.c \
       kernel/memory.c \
       kernel/process.c \
+      kernel/sched.c \
+      kernel/sync.c \
       kernel/ramfs.c \
       kernel/shell.c \
       kernel/test.c
