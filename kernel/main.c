@@ -19,6 +19,10 @@
 #include "console.h"
 #include "trap.h"
 #include "timer.h"
+
+#ifdef BUILD_QEMU
+extern void idt_init(void);
+#endif
 #include "syscall.h"
 
 #include "memory.h"
@@ -29,28 +33,46 @@
 #include "test.h"
 
 int kernel_main(void) {
-    /* ---- 第一阶段：基础框架 ---- */
     console_init();
     printk("[MiniOS] boot success\n");
     printk("[MiniOS] kernel_main start\n");
 
     trap_init();
+
+#ifdef BUILD_QEMU
+    idt_init();   /* 装 IDT + 初始化 PIC, 不开中断 */
+#endif
+
     timer_init();
     syscall_init();
-
-    /* ---- 第二阶段：内存与进程 ---- */
     memory_init();
     process_init();
-
-    /* ---- 第三阶段：调度器（NEW!） ---- */
     sched_init();
 
-    /* ---- 第四阶段：自检 ---- */
+    /* 自检 (在 idle 上下文中运行) */
     kernel_test();
 
-    /* ---- 第五阶段：文件系统与 Shell ---- */
     ramfs_init();
+
+#ifdef BUILD_QEMU
+    /*
+     * ★ 开启真上下文切换, 然后 idle yield → shell ★
+     */
+    extern void sched_enable_real_switch(void);
+    sched_enable_real_switch();
+
+    printk("[MiniOS] starting shell via real context switch...\n");
+    extern void sched_add_process(int pid);
+    sched_add_process(1);     /* shell 入队 */
+    extern void sched_yield(void);
+    sched_yield();            /* idle → shell (真 switch_to!) */
+    /* idle 循环: shell 退出后或者无人可调度时在这里 */
+    printk("[MiniOS] idle loop\n");
+    while (1) { sched_yield(); }
+#else
+    /* 本地模式: 单线程, 直接调用 shell */
     shell_start();
+#endif
 
     return 0;
 }

@@ -62,6 +62,31 @@ static int next_free_slot(void) {
     return -1;
 }
 
+/*
+ * shell_main — shell 进程入口 (在 shell 自己的内核栈上执行!)
+ * 由 switch_to 恢复上下文后首次执行
+ */
+void shell_main(void) {
+    extern void shell_start(void);
+    shell_start();
+    /* shell 退出后, 循环 yield, 等待被父进程回收 */
+    extern void sched_yield(void);
+    while (1) { sched_yield(); }
+}
+
+/*
+ * process_entry — 普通新进程入口
+ * 被 switch_to 首次调度时执行, 在进程自己的内核栈上
+ */
+void process_entry(void) {
+    /* 新进程: 跑一次后自阻塞, 避免干扰调度 */
+    extern void sched_block(void);
+    sched_block();
+    /* 被唤醒后 yield 循环 */
+    extern void sched_yield(void);
+    while (1) { sched_yield(); }
+}
+
 /* ================================================================
  *  进程表初始化
  * ================================================================ */
@@ -84,17 +109,17 @@ void process_init(void) {
     process_table[slot].priority    = 0;            /* 最低优先级 */
     process_table[slot].kernel_stack = alloc_page();
     process_table[slot].pdir         = vm_create_address_space();
-    process_table[slot].vma_list     = NULL;  /* idle 无用户态 VMA */
+    process_table[slot].vma_list     = NULL;
     process_table[slot].exit_code    = 0;
     memset(&process_table[slot].context, 0, sizeof(process_context_t));
+    /* idle 的上下文: 首次被切走时由 switch_to 保存真实值, 这里留空即可 */
 
     current_pid = 0;   /* idle 是最初的当前进程 */
 
-    /* ---- PID 1: shell 进程 ----
-     * shell 是用户交互进程，在 idle 之后创建。 */
+    /* ---- PID 1: shell 进程 ---- */
     slot = next_free_slot();
     process_table[slot].pid         = next_pid++;
-    process_table[slot].parent_pid  = 0;            /* 父进程是 idle */
+    process_table[slot].parent_pid  = 0;
     strcpy(process_table[slot].name, "shell");
     process_table[slot].state       = PROC_READY;
     process_table[slot].time_slice  = DEFAULT_TIME_SLICE;
@@ -102,9 +127,14 @@ void process_init(void) {
     process_table[slot].priority    = 1;
     process_table[slot].kernel_stack = alloc_page();
     process_table[slot].pdir         = vm_create_address_space();
-    process_table[slot].vma_list     = NULL;  /* shell 无用户态 VMA */
+    process_table[slot].vma_list     = NULL;
     process_table[slot].exit_code    = 0;
     memset(&process_table[slot].context, 0, sizeof(process_context_t));
+    /* ★ shell 上下文: 首次被调度时跳到 shell_main, 在 shell 自己的栈上 */
+    process_table[slot].context.esp =
+        (uint32_t)(uintptr_t)process_table[slot].kernel_stack + PAGE_SIZE - 16;
+    process_table[slot].context.eip =
+        (uint32_t)(uintptr_t)shell_main;
 
     printf("[MiniOS] process init ok (2 processes created)\n");
 }
@@ -159,6 +189,12 @@ int process_create(const char *name) {
     proc->vma_list     = NULL;
     proc->exit_code    = 0;
     memset(&proc->context, 0, sizeof(process_context_t));
+
+    /* ★ 初始化上下文的栈指针: 指向内核栈顶 */
+    proc->context.esp = (uint32_t)(uintptr_t)stack + PAGE_SIZE - 16;
+    /* eip = 进程入口: 首次被调度时从这里开始执行 */
+    extern void process_entry(void);
+    proc->context.eip = (uint32_t)(uintptr_t)process_entry;
 
     /*
      * 设置用户态标准内存布局 (Demand Paging):

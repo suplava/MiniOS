@@ -61,7 +61,35 @@ void vga_set_color(uint8_t fg, uint8_t bg) {
     vga_color = (bg << 4) | (fg & 0x0F);
 }
 
+/* 端口 I/O 内联函数 (定义在前, 供后续使用) */
+static inline void outb(uint16_t port, uint8_t val) {
+    __asm__ volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
+}
+static inline uint8_t inb(uint16_t port) {
+    uint8_t ret;
+    __asm__ volatile ("inb %1, %0" : "=a"(ret) : "Nd"(port));
+    return ret;
+}
+
+/*
+ * 串口输出 — COM1 端口 0x3F8
+ * 写一个字节到串口, QEMU 通过 -serial stdio 转发到终端
+ */
+static void serial_putchar(char c) {
+    /* 等待发送缓冲区空闲 (端口 0x3FD bit 5 = 1) */
+    while ((inb(0x3FD) & 0x20) == 0);
+    outb(0x3F8, (uint8_t)c);
+    /* 换行符补一个回车, 终端才能正确显示 */
+    if (c == '\n') {
+        while ((inb(0x3FD) & 0x20) == 0);
+        outb(0x3F8, '\r');
+    }
+}
+
 int hal_putchar(int c) {
+    /* 同时输出到 VGA 和串口 */
+    serial_putchar((char)c);
+
     if (c == '\n') {
         vga_col = 0;
         vga_row++;
@@ -92,11 +120,6 @@ void vga_write(const char *str) {
     while (*str) hal_putchar(*str++);
 }
 
-
-/* ═══════════════════════════════════════════════════════════════
- *  迷你 printf (支持 %s %d %c %p %x %08x %%)
- * ═══════════════════════════════════════════════════════════════ */
-
 static void print_dec(char **p, int n) {
     if (n < 0) { *(*p)++ = '-'; n = -n; }
     char tmp[12]; int i = 0;
@@ -126,7 +149,20 @@ static int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap) {
         if (*f != '%') { *p++ = *f++; continue; }
         f++;
         int width = 0;
-        while (*f >= '0' && *f <= '9') { width = width * 10 + (*f - '0'); f++; }
+
+        /* 跳过 printf 格式标志 ( -, 0, +, space, # ) */
+        while (*f == '-' || *f == '0' || *f == '+' || *f == ' ' || *f == '#')
+            f++;
+        /* 读取宽度 (如 %40s, %5d), 我们忽略对齐但正确跳过数字 */
+        while (*f >= '0' && *f <= '9') {
+            width = width * 10 + (*f - '0');
+            f++;
+        }
+        /* 跳过精度 (如 %.2f, %.3f) */
+        if (*f == '.') {
+            f++;
+            while (*f >= '0' && *f <= '9') f++;
+        }
 
         switch (*f) {
         case 's': {
@@ -149,10 +185,17 @@ static int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap) {
         case '%':
             *p++ = '%';
             break;
+        case 'f':   /* 浮点数: 裸机无浮点支持, 占位 */
+            for (char *t = "[F]"; *t && p < end; t++) *p++ = *t;
+            (void)va_arg(ap, double);
+            break;
         case 'l':
-            f++; /* skip 'l' in %ld etc, treat as int */
+            f++;
             if (*f == 'd' || *f == 'u' || *f == 'x')
                 print_dec(&p, va_arg(ap, long));
+            else if (*f == 'f')
+                { for (char *t = "[F]"; *t && p < end; t++) *p++ = *t;
+                  (void)va_arg(ap, double); }
             break;
         default:
             *p++ = '%'; *p++ = *f;
@@ -202,23 +245,22 @@ static const char kbd_us[128] = {
     /* 余下均为 0 */
 };
 
-static inline void outb(uint16_t port, uint8_t val) {
-    __asm__ volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
-}
-static inline uint8_t inb(uint16_t port) {
-    uint8_t r;
-    __asm__ volatile ("inb %1, %0" : "=a"(r) : "Nd"(port));
-    return r;
-}
-
 int kbd_poll(void) {
-    return (inb(0x64) & 1);
+    /* 串口有数据? (port 0x3FD bit 0) — -nographic 模式走这条 */
+    if (inb(0x3FD) & 1) return 2;
+    /* PS/2 键盘有数据? (port 0x64 bit 0) — GUI 模式 */
+    return (inb(0x64) & 1) ? 1 : 0;
 }
 
 char kbd_getchar(void) {
     while (!kbd_poll()) { /* 忙等 */ }
+
+    /* 串口输入 (直接 ASCII, 不需要 scan code 转换) */
+    if (inb(0x3FD) & 1)
+        return (char)inb(0x3F8);
+
+    /* PS/2 键盘输入 (需要 scan code → ASCII) */
     uint8_t sc = inb(0x60);
-    /* 只处理 press (bit 7 == 0), 忽略 release (bit 7 == 1) */
     if (sc & 0x80) return 0;
     if (sc < 128) return kbd_us[sc];
     return 0;
@@ -229,13 +271,29 @@ void kbd_readline(char *buf, int max) {
     while (i < max - 1) {
         char c = kbd_getchar();
         if (c == 0) continue;
-        if (c == '\n') { buf[i++] = '\n'; buf[i] = '\0'; break; }
-        if (c == '\b') { if (i > 0) i--; continue; }
-        buf[i++] = c;
-        hal_putchar(c);  /* 回声 */
+        /* Enter / Return */
+        if (c == '\n' || c == '\r') {
+            hal_putchar('\n');
+            buf[i] = '\0';
+            break;
+        }
+        /* Backspace (0x08) 或 DEL (0x7F) */
+        if (c == '\b' || c == 0x7F) {
+            if (i > 0) {
+                i--;
+                hal_putchar('\b');  /* 光标回退 */
+                hal_putchar(' ');
+                hal_putchar('\b');
+            }
+            continue;
+        }
+        /* 只接受可打印字符 */
+        if (c >= ' ' && c <= '~') {
+            buf[i++] = c;
+            hal_putchar(c);
+        }
     }
-    hal_putchar('\n');
-    buf[max - 1] = '\0';
+    buf[i] = '\0';
 }
 
 char *hal_fgets(char *buf, int size, void *unused) {
@@ -259,7 +317,7 @@ char *hal_fgets(char *buf, int size, void *unused) {
 
 #define PIT_FREQ  1193180
 
-static unsigned long pit_ticks = 0;
+unsigned long pit_ticks = 0;   /* 非 static, idt.c 中断处理需要 ++ */
 
 void pit_init(unsigned int hz) {
     uint16_t divisor = (uint16_t)(PIT_FREQ / hz);
@@ -272,9 +330,16 @@ void pit_init(unsigned int hz) {
 
 void pit_handler(void) {
     pit_ticks++;
-    /* 调用调度器的 tick 处理 */
     extern void sched_tick(void);
     sched_tick();
+}
+
+/* 直接读 PIT 计数器 (不需要中断), 用于无 sti 时的计时 */
+unsigned int pit_read_count(void) {
+    outb(0x43, 0x00);  /* 锁存通道 0 当前计数值 */
+    uint8_t lo = inb(0x40);
+    uint8_t hi = inb(0x40);
+    return (hi << 8) | lo;
 }
 
 unsigned long pit_get_ticks(void) {

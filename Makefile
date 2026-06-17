@@ -34,7 +34,7 @@ run: all
 	./$(TARGET)
 
 # ── QEMU 裸机模式 ────────────────────────────────
-QEMU_CC      = i386-elf-gcc
+QEMU_CC      = i686-linux-gnu-gcc
 QEMU_CFLAGS  = -DBUILD_QEMU -Iinclude -Wall -Wextra -std=c11 \
                -ffreestanding -nostdlib -m32
 QEMU_LDFLAGS = -T linker.ld -ffreestanding -nostdlib -m32
@@ -56,11 +56,13 @@ SRC_QEMU = kernel/main.c \
 qemu: minios.bin
 	@echo "  → minios.bin ready (use 'make qemu-iso' for .iso)"
 
-minios.bin: $(SRC_QEMU) kernel/boot.S linker.ld
+minios.bin: $(SRC_QEMU) kernel/boot.S kernel/irq.S kernel/switch.S kernel/idt.c linker.ld
 	$(QEMU_CC) $(QEMU_CFLAGS) -c kernel/boot.S -o kernel/boot.o
-	$(QEMU_CC) $(QEMU_CFLAGS) -c $(SRC_QEMU)
-	$(QEMU_CC) $(QEMU_LDFLAGS) *.o kernel/boot.o -o $@
-	@rm -f *.o kernel/boot.o
+	$(QEMU_CC) $(QEMU_CFLAGS) -c kernel/irq.S -o kernel/irq.o
+	$(QEMU_CC) $(QEMU_CFLAGS) -c kernel/switch.S -o kernel/switch.o
+	$(QEMU_CC) $(QEMU_CFLAGS) -c $(SRC_QEMU) kernel/idt.c
+	$(QEMU_CC) $(QEMU_LDFLAGS) *.o kernel/boot.o kernel/irq.o kernel/switch.o -o $@
+	@rm -f *.o kernel/boot.o kernel/irq.o kernel/switch.o
 
 qemu-iso: minios.bin
 	@mkdir -p iso/boot/grub
@@ -75,6 +77,9 @@ qemu-iso: minios.bin
 	@echo "  → minios.iso ready"
 
 qemu-run: qemu-iso
+	qemu-system-i386 -cdrom minios.iso -m 32M -no-reboot -nographic
+
+qemu-run-gui: qemu-iso
 	qemu-system-i386 -cdrom minios.iso -m 32M -no-reboot
 
 clean:

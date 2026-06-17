@@ -41,6 +41,7 @@ void sched_wakeup(int pid);
 void sched_set_algo(sched_algo_t algo);
 sched_algo_t sched_get_algo(void);
 const char *sched_algo_name(void);
+void sched_enable_real_switch(void);   /* 开启真寄存器切换 */
 
 /* 时间片配置 */
 void sched_set_time_slice(int ticks);
