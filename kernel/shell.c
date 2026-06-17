@@ -51,6 +51,9 @@ static void shell_help(void) {
     printf("  clear                clear screen\n");
     printf("  test                 run all MiniOS test cases\n");
     printf("  fault                simulate trap exception\n");
+    printf("  illegal              trigger illegal instruction trap\n");
+    printf("  nullptr              trigger null pointer access trap\n");
+    printf("  proc                 start multi-process round-robin demo\n");
     printf("  syscall              simulate syscall\n");
     printf("  exit                 exit MiniOS\n");
 }
@@ -223,6 +226,20 @@ void shell_start(void) {
         else if (strcmp(cmd, "fault") == 0) {
             printf("[shell] trigger simulated page fault trap\n");
             trap_test_fault();
+        }
+        else if (strcmp(cmd, "illegal") == 0) {
+            printf("[shell] trigger illegal instruction trap\n");
+            trap_test_illegal();
+        }
+        else if (strcmp(cmd, "nullptr") == 0) {
+            printf("[shell] trigger null pointer write trap\n");
+            trap_test_nullptr();
+        }
+        else if (strcmp(cmd, "proc") == 0) {
+            printf("[shell] start multi-process round-robin demo\n");
+            process_create("proc_1");
+            process_create("proc_2");
+            process_create("proc_3");
         }
         else if (strcmp(cmd, "syscall") == 0) {
             printf("[shell] simulate standard syscall sequence\n");

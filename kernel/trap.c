@@ -22,6 +22,10 @@ void trap_handler(int trap_no, const char *message) {
         printk("fault exception");
     } else if (trap_no == TRAP_SYSCALL) {
         printk("system call");
+    } else if (trap_no == TRAP_ILLEGAL) {
+        printk("illegal instruction exception");
+    } else if (trap_no == TRAP_NULLPTR) {
+        printk("null pointer access exception");
     } else {
         printk("unknown trap");
     }
@@ -41,3 +45,9 @@ void trap_test_fault(void) {
     trap_handler(TRAP_FAULT, "simulated fault for demo");
 }
 
+void trap_test_illegal(void) {
+    trap_handler(TRAP_ILLEGAL, "invalid machine code executed");
+}
+void trap_test_nullptr(void) {
+    trap_handler(TRAP_NULLPTR, "write access to null address");
+}
