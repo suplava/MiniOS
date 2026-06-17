@@ -19,6 +19,8 @@
 #include "timer.h"
 #include "ramfs.h"
 #include "syscall.h"
+#include "test.h"
+#include "trap.h"
 
 #define CMD_BUF_SIZE 256
 
@@ -47,6 +49,9 @@ static void shell_help(void) {
     printf("  rm <file>            delete a file\n");
     printf("  echo <text>          print text\n");
     printf("  clear                clear screen\n");
+    printf("  test                 run all MiniOS test cases\n");
+    printf("  fault                simulate trap exception\n");
+    printf("  syscall              simulate syscall\n");
     printf("  exit                 exit MiniOS\n");
 }
 
@@ -209,6 +214,22 @@ void shell_start(void) {
         else if (strncmp(cmd, "kill ", 5) == 0) {
             int pid = atoi(cmd + 5);
             process_kill(pid);
+        }
+        else if (strcmp(cmd, "test") == 0) {
+            printf("[shell] running all system test cases\n");
+            kernel_test();
+            printf("[shell] all test finished\n");
+        }
+        else if (strcmp(cmd, "fault") == 0) {
+            printf("[shell] trigger simulated page fault trap\n");
+            trap_test_fault();
+        }
+        else if (strcmp(cmd, "syscall") == 0) {
+            printf("[shell] simulate standard syscall sequence\n");
+            syscall_handler(SYS_WRITE, "test write", 10, 0);
+            syscall_handler(SYS_GETPID, "", 0, 0);
+            syscall_handler(SYS_YIELD, "", 0, 0);
+            syscall_handler(SYS_EXIT, "", 0, 0);
         }
         /* ---- 文件系统 ---- */
         else if (strcmp(cmd, "ls") == 0) {
