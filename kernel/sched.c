@@ -13,9 +13,7 @@
  *   FCFS:进程一旦获得 CPU 就运行到主动 yield/block/exit
  * ================================================================ */
 
-#include <stdio.h>
-#include <string.h>
-#include <time.h>
+#include "hal.h"
 #include "sched.h"
 #include "process.h"
 #include "memory.h"

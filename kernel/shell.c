@@ -8,10 +8,7 @@
  *   - 集成调度器，让用户直观感受多任务调度
  * ================================================================ */
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-
+#include "hal.h"
 #include "shell.h"
 #include "memory.h"
 #include "process.h"

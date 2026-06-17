@@ -1,4 +1,4 @@
-#include <stdio.h>
+#include "hal.h"
 #include "console.h"
 
 void console_init(void) {

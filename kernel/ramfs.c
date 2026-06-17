@@ -1,5 +1,4 @@
-#include <stdio.h>
-#include <string.h>
+#include "hal.h"
 #include "ramfs.h"
 
 static ramfs_file_t file_table[RAMFS_MAX_FILES];

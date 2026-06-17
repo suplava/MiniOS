@@ -10,8 +10,7 @@
  * ================================================================
  */
 
-#include <stdio.h>
-#include <string.h>
+#include "hal.h"
 #include "process.h"
 #include "memory.h"
 #include "sched.h"

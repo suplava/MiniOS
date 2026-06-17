@@ -15,6 +15,7 @@
  *  10. shell       — 交互式命令行（最后启动，进入主循环）
  * ================================================================ */
 
+#include "hal.h"
 #include "console.h"
 #include "trap.h"
 #include "timer.h"

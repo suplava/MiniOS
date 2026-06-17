@@ -10,12 +10,10 @@
  *    E. 集成测试        — 多进程并发、完整生命周期
  * ================================================================ */
 
-#include <stdio.h>
-#include <string.h>
+#include "hal.h"
 #include "test.h"
 #include "memory.h"
 #include "process.h"
-#include <time.h>
 #include "sched.h"
 #include "sync.h"
 
