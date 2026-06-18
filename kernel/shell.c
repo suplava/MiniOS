@@ -176,7 +176,14 @@ void shell_start(void) {
         else if (strncmp(cmd, "run ", 4) == 0) {
             char *name = cmd + 4;
             while (*name == ' ') name++;
-            process_create(name);
+            int pid = process_create(name);
+            if (pid > 0) {
+                process_t *p = process_get_by_pid(pid);
+                if (p) {
+                    p->context.eip = (uint32_t)(uintptr_t)worker_main;
+                    printf("[shell] worker %s (pid=%d) created\n", name, pid);
+                }
+            }
         }
         else if (strcmp(cmd, "fork") == 0) {
             printf("[shell] forking current process...\n");

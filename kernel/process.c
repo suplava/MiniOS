@@ -79,11 +79,30 @@ void shell_main(void) {
  * 被 switch_to 首次调度时执行, 在进程自己的内核栈上
  */
 void process_entry(void) {
-    /* 新进程: 跑一次后自阻塞, 避免干扰调度 */
+    /* 静默版本: 测试用, 跑一次就阻塞 */
     extern void sched_block(void);
     sched_block();
-    /* 被唤醒后 yield 循环 */
     extern void sched_yield(void);
+    while (1) { sched_yield(); }
+}
+
+/*
+ * worker_main — 演示用的工作进程入口
+ * 在自己的内核栈上循环干活 + yield, 展示真多任务
+ */
+void worker_main(void) {
+    extern int  process_get_current_pid(void);
+    extern void sched_yield(void);
+    extern void sched_block(void);
+
+    int pid = process_get_current_pid();
+    for (int r = 0; r < 3; r++) {
+        printf("[worker %d] working round %d/3\n", pid, r + 1);
+        for (volatile int j = 0; j < 300000; j++) {}  /* 模拟干活 */
+        sched_yield();  /* ★ 让出 CPU */
+    }
+    printf("[worker %d] all done, exiting\n", pid);
+    sched_block();
     while (1) { sched_yield(); }
 }
 
