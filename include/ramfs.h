@@ -18,6 +18,7 @@ int ramfs_create_file(const char *name);
 int ramfs_write_file(const char *name, const char *content);
 int ramfs_read_file(const char *name, char *buffer, int buffer_size);
 int ramfs_delete_file(const char *name);
+void ramfs_print_info(void); 
 
 void ramfs_list_files(void);
 void ramfs_print_file(const char *name);

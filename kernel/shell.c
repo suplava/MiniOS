@@ -47,12 +47,23 @@ static void shell_help(void) {
     printf("  touch <file>         create a new file\n");
     printf("  write <file> <text>  write text to file\n");
     printf("  rm <file>            delete a file\n");
+    printf("  fsinfo               show RAMFS filesystem statistics\n");
     printf("  echo <text>          print text\n");
     printf("  clear                clear screen\n");
     printf("  test                 run all MiniOS test cases\n");
     printf("  fault                simulate trap exception\n");
     printf("  illegal              trigger illegal instruction trap\n");
     printf("  nullptr              trigger null pointer access trap\n");
+    printf("  divzero              trigger division by zero trap\n");
+    printf("  overflow             trigger integer overflow trap\n");
+    printf("  breakpoint           trigger breakpoint trap\n");
+    printf("  singlestep           trigger single step trap\n");
+    printf("  align                trigger misaligned access trap\n");
+    printf("  stack                trigger stack error trap\n");
+    printf("  protection           trigger general protection trap\n");
+    printf("  fpu                  trigger floating point exception\n");
+    printf("  pfread               trigger page fault (read)\n");
+    printf("  pfwrite              trigger page fault (write)\n");
     printf("  proc                 start multi-process round-robin demo\n");
     printf("  syscall              simulate syscall\n");
     printf("  exit                 exit MiniOS\n");
@@ -235,6 +246,46 @@ void shell_start(void) {
             printf("[shell] trigger null pointer write trap\n");
             trap_test_nullptr();
         }
+        else if (strcmp(cmd, "divzero") == 0) {   // 新增分支
+            printf("[shell] trigger division by zero trap\n");
+            trap_test_divzero();
+        }
+        else if (strcmp(cmd, "overflow") == 0) {
+            printf("[shell] trigger integer overflow trap\n");
+            trap_test_overflow();
+        }
+        else if (strcmp(cmd, "breakpoint") == 0) {
+            printf("[shell] trigger breakpoint trap\n");
+            trap_test_breakpoint();
+        }
+        else if (strcmp(cmd, "singlestep") == 0) {
+            printf("[shell] trigger single step trap\n");
+            trap_test_singlestep();
+        }
+        else if (strcmp(cmd, "align") == 0) {
+            printf("[shell] trigger misaligned access trap\n");
+            trap_test_alignment();
+        }
+        else if (strcmp(cmd, "stack") == 0) {
+            printf("[shell] trigger stack error trap\n");
+            trap_test_stack();
+        }
+        else if (strcmp(cmd, "protection") == 0) {
+            printf("[shell] trigger general protection trap\n");
+            trap_test_protection();
+        }
+        else if (strcmp(cmd, "fpu") == 0) {
+            printf("[shell] trigger floating point exception\n");
+            trap_test_fpu();
+        }
+        else if (strcmp(cmd, "pfread") == 0) {
+            printf("[shell] trigger page fault (read access violation) trap\n"); 
+            trap_test_pf_read(); 
+        }
+        else if (strcmp(cmd, "pfwrite") == 0) { 
+            printf("[shell] trigger page fault (write access violation) trap\n");
+            trap_test_pf_write();
+         }
         else if (strcmp(cmd, "proc") == 0) {
             printf("[shell] start multi-process round-robin demo\n");
             process_create("proc_1");
@@ -269,6 +320,9 @@ void shell_start(void) {
             char *filename = cmd + 3;
             while (*filename == ' ') filename++;
             ramfs_delete_file(filename);
+        }
+        else if (strcmp(cmd, "fsinfo") == 0) {
+            ramfs_print_info();
         }
         /* ---- 其他 ---- */
         else if (strncmp(cmd, "echo ", 5) == 0) {
