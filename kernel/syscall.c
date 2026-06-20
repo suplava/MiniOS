@@ -12,6 +12,7 @@
  *   - SYS_GETPID → 返回当前进程的真实 PID
  * ================================================================ */
 
+#include "hal.h"
 #include "console.h"
 #include "trap.h"
 #include "syscall.h"

@@ -86,6 +86,7 @@ int  process_kill(int pid);
 /* ★ fork / exec — 类 Unix 进程原语 */
 int  process_fork(void);                   /* 复制当前进程 */
 int  process_exec(const char *name);       /* 替换当前进程映像 */
+void worker_main(void);                    /* 演示用工作进程入口 */
 
 /* ★ wait / waitpid — 等待子进程退出 */
 int  process_wait(int *exit_code);          /* 等待任意子进程 */

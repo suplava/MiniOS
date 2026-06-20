@@ -10,7 +10,7 @@
  *   - 新增 timer_start_periodic() 用于周期性触发（shell 演示用）
  * ================================================================ */
 
-#include <stdio.h>
+#include "hal.h"
 #include "console.h"
 #include "trap.h"
 #include "timer.h"

@@ -13,12 +13,17 @@
  *   FCFS:进程一旦获得 CPU 就运行到主动 yield/block/exit
  * ================================================================ */
 
-#include <stdio.h>
-#include <string.h>
-#include <time.h>
+#include "hal.h"
 #include "sched.h"
 #include "process.h"
 #include "memory.h"
+
+/* 本地模式: switch_to 是 no-op (单线程, 无真正栈切换) */
+#ifndef BUILD_QEMU
+void switch_to(process_context_t *old, process_context_t *new) {
+    (void)old; (void)new;
+}
+#endif
 
 /* ================================================================
  *  就绪队列 (环形数组, 同 v1.0)
@@ -36,6 +41,9 @@ static int          g_time_slice  = DEFAULT_TIME_SLICE; /* 可配置时间片 */
 static int sched_switch_count = 0;
 static int sched_tick_count   = 0;
 static int sched_yield_count  = 0;
+static int sched_real_switch  = 0;   /* 0=测试软切换, 1=真寄存器切换 */
+
+void sched_enable_real_switch(void) { sched_real_switch = 1; }
 
 /* ================================================================
  *  上下文切换计时
@@ -217,9 +225,10 @@ void sched_init(void) {
 
     sched_reset_timing();
 
+    /* 就绪队列初始只放非 shell 的进程 (shell 等测试跑完再手动加入) */
     for (int i = 0; i < MAX_PROCESSES; i++) {
         process_t *proc = process_get_by_pid(i);
-        if (proc != NULL && proc->state == PROC_READY) {
+        if (proc != NULL && proc->state == PROC_READY && proc->pid != 1) {
             ready_enqueue(proc->pid);
         }
     }
@@ -245,32 +254,29 @@ void schedule(void) {
 
     if (!old_proc || !new_proc) return;
 
-    /* ── ★ 上下文切换 + 计时 ★ ── */
-    clock_t t_start = clock();
-
-    /* 1. 保存旧进程的上下文 */
-    switch_context(&old_proc->context, &new_proc->context);
-
-    /* 2. 更新 PCB 状态 (idle 除外，它永远不进入 READY) */
+    /* 1. 先更新 PCB 状态 (必须在 switch_to 之前, 新进程需要知道 current) */
     if (old_pid > 0 && old_proc->state == PROC_RUNNING) {
         process_set_state(old_pid, PROC_READY);
     }
     process_set_state(new_pid, PROC_RUNNING);
     process_set_current(new_pid);
-
-    /* 3. 重置新进程的时间片 */
     new_proc->time_slice = g_time_slice;
-
     sched_switch_count++;
 
-    clock_t t_end = clock();
-    record_switch_time(t_start, t_end);
+    /* 每 100 次切换输出 */
 
-    printf("[sched] switch: pid %d → pid %d (switch #%d, "
-           "%.2f us, ready_count=%d)\n",
-           old_pid, new_pid, sched_switch_count,
-           (double)(t_end - t_start) * 1000000.0 / CLOCKS_PER_SEC,
-           ready_count);
+    /* 每 100 次切换输出 */
+    if (sched_switch_count % 100 == 0) {
+        printf("[sched] %d switches\n", sched_switch_count);
+    }
+
+    /* 2. 上下文切换 (测试期=软切换, shell期=真寄存器切换) */
+    if (sched_real_switch) {
+        extern void switch_to(process_context_t *old, process_context_t *new);
+        switch_to(&old_proc->context, &new_proc->context);
+    }
+
+    /* 切回来时继续执行 */
 }
 
 /* ================================================================
@@ -323,8 +329,11 @@ void sched_yield(void) {
         return;
     }
 
-    printf("[sched] pid %d yields CPU (yield #%d)\n",
-           current->pid, sched_yield_count);
+    /* 每 50 次 yield 才输出一次 */
+    if (sched_yield_count % 50 == 0) {
+        printf("[sched] pid %d yields CPU (yield #%d)\n",
+               current->pid, sched_yield_count);
+    }
     ready_enqueue(current->pid);
     schedule();
 }
@@ -366,15 +375,15 @@ void sched_print_info(void) {
     printf("  context switches: %d\n", sched_switch_count);
     printf("  yields         : %d\n", sched_yield_count);
 
-    double avg_us = sched_get_avg_switch_time_us();
+    int avg_us = (int)sched_get_avg_switch_time_us();
     printf("  ── 上下文切换性能 ──\n");
-    printf("  avg switch time: %.2f us (%.4f ms)\n",
-           avg_us, avg_us / 1000.0);
-    printf("  max switch time: %.2f us (%.4f ms)\n",
-           max_switch_time_us, max_switch_time_us / 1000.0);
+    printf("  avg switch time: %d us (%d ms)\n",
+           avg_us, avg_us / 1000);
+    printf("  max switch time: %d us (%d ms)\n",
+           (int)max_switch_time_us, (int)(max_switch_time_us / 1000.0));
 
-    if (avg_us > 0 && avg_us < 1000.0) {
-        printf("  ★ 平均切换耗时 %.2f us << 1000 us (1ms), "
+    if (avg_us > 0 && avg_us < 1000) {
+        printf("  ★ 平均切换耗时 %d us << 1000 us (1ms), "
                "满足 <1ms 指标 ✓\n", avg_us);
     }
 

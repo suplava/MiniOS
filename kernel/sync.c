@@ -6,8 +6,7 @@
  *  互斥锁：带所有权检查的排他锁
  * ================================================================ */
 
-#include <stdio.h>
-#include <string.h>
+#include "hal.h"
 #include "sync.h"
 #include "sched.h"
 

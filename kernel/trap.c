@@ -1,3 +1,4 @@
+#include "hal.h"
 #include "console.h"
 #include "trap.h"
 
