@@ -1,24 +1,20 @@
 #include "console.h"
-#include "hal.h"
 
 /*
  * MiniOS Console
  *
- * 说明：
- * 1. 已删除 Windows 平台相关代码：
- *    - windows.h
- *    - SetConsoleOutputCP
- *    - SetConsoleCP
- *    - printf
+ * 双模式说明：
+ * 1. 本地模式：
+ *    make / make run
+ *    使用 printf / getchar，方便在 Windows / VSCode 终端调试。
  *
- * 2. 当前版本使用 COM1 串口输出，适合 QEMU：
- *    qemu-system-i386 ... -serial stdio
- *
- * 3. 上层模块继续使用：
- *    - printk()
- *    - print_int()
- *    - print_line()
+ * 2. QEMU 模式：
+ *    make qemu / make qemu-run
+ *    Makefile 会加入 -DBUILD_QEMU。
+ *    使用 COM1 串口输出，适合 qemu-system-i386 -nographic。
  */
+
+#ifdef BUILD_QEMU
 
 typedef unsigned char  uint8_t;
 typedef unsigned short uint16_t;
@@ -39,6 +35,10 @@ static int serial_is_transmit_empty(void) {
     return inb(COM1_PORT + 5) & 0x20;
 }
 
+static int serial_received(void) {
+    return inb(COM1_PORT + 5) & 0x01;
+}
+
 static void serial_putchar(char c) {
     if (c == '\n') {
         serial_putchar('\r');
@@ -48,6 +48,13 @@ static void serial_putchar(char c) {
     }
 
     outb(COM1_PORT, (uint8_t)c);
+}
+
+static char serial_getchar(void) {
+    while (!serial_received()) {
+    }
+
+    return (char)inb(COM1_PORT);
 }
 
 static void serial_init(void) {
@@ -65,6 +72,14 @@ void console_init(void) {
     printk("[MiniOS] console init ok\n");
 }
 
+void console_putchar(char c) {
+    serial_putchar(c);
+}
+
+char console_getchar(void) {
+    return serial_getchar();
+}
+
 void printk(const char *str) {
     if (str == 0) {
         return;
@@ -79,7 +94,7 @@ void printk(const char *str) {
 void print_int(int num) {
     char buf[16];
     int i = 0;
-    int negative = 0;
+    unsigned int n;
 
     if (num == 0) {
         serial_putchar('0');
@@ -87,17 +102,15 @@ void print_int(int num) {
     }
 
     if (num < 0) {
-        negative = 1;
-        num = -num;
-    }
-
-    while (num > 0 && i < 15) {
-        buf[i++] = (char)('0' + (num % 10));
-        num /= 10;
-    }
-
-    if (negative) {
         serial_putchar('-');
+        n = (unsigned int)(-num);
+    } else {
+        n = (unsigned int)num;
+    }
+
+    while (n > 0 && i < 15) {
+        buf[i++] = (char)('0' + (n % 10));
+        n /= 10;
     }
 
     while (i > 0) {
@@ -109,3 +122,61 @@ void print_line(const char *str) {
     printk(str);
     printk("\n");
 }
+
+#else
+
+#include <stdio.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
+void console_init(void) {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+#endif
+
+    printk("[MiniOS] console init ok\n");
+}
+
+void console_putchar(char c) {
+    putchar(c);
+    fflush(stdout);
+}
+
+char console_getchar(void) {
+    int c = getchar();
+
+    if (c == EOF) {
+        return 0;
+    }
+
+    return (char)c;
+}
+
+void printk(const char *str) {
+    if (str == 0) {
+        return;
+    }
+
+    printf("%s", str);
+    fflush(stdout);
+}
+
+void print_int(int num) {
+    printf("%d", num);
+    fflush(stdout);
+}
+
+void print_line(const char *str) {
+    if (str == 0) {
+        printf("\n");
+    } else {
+        printf("%s\n", str);
+    }
+
+    fflush(stdout);
+}
+
+#endif
