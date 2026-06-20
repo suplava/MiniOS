@@ -26,12 +26,11 @@ _start:
     pushl $0
     popf
 
-    /* 保存 Multiboot 信息 (ebx = multiboot_info 指针) */
-    pushl %ebx
-    pushl %eax
-
-    /* 调用 C 入口 */
+    /* 传递 Multiboot 信息给 kernel_main(magic, info) */
+    pushl %ebx       /* arg2: multiboot_info 指针 */
+    pushl %eax       /* arg1: multiboot magic (0x2BADB002) */
     call kernel_main
+    addl $8, %esp
 
     /* 永远不该到这里 */
     cli
