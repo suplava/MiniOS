@@ -27,7 +27,8 @@ static void shell_help(void) {
     printf("  help                 show command list\n");
     printf("  mem                  show memory information\n");
     printf("  ps                   show process information\n");
-    printf("  run <name>           create a test process\n");
+    printf("  pstree               show process tree\n");
+    printf("  run <name>           create a worker process\n");
     printf("  fork                 fork current process\n");
     printf("  exec <app> [args]    load and run MiniExec user program\n");
     printf("  pexec <name>         simulate process_exec replacement\n");
@@ -287,6 +288,8 @@ static int shell_run_cmd(char *cmd) {
         }
         else if (strcmp(cmd, "ps") == 0) {
             process_print_list();
+        } else if (strcmp(cmd, "pstree") == 0) {
+            process_print_tree();
         }
         /* ---- 调度器相关命令 (NEW) ---- */
         else if (strcmp(cmd, "sched") == 0) {

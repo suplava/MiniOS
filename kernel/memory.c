@@ -26,6 +26,60 @@ static unsigned char page_used[TOTAL_PAGES];
 static int total_pages = TOTAL_PAGES;
 static int used_pages  = 0;
 
+#ifdef BUILD_QEMU
+#include <stdint.h>
+
+/*
+ * memory_detect — 从 Multiboot 信息解析物理内存大小
+ *
+ * multiboot_info 结构 (简化):
+ *   offset 0: flags      (bit0=mem_* valid, bit6=mmap valid)
+ *   offset 4: mem_lower  (KB, 0-640KB 常规内存)
+ *   offset 8: mem_upper  (KB, 1MB 以上扩展内存)
+ *
+ * 示例: QEMU -m 32M → mem_upper = 31744 KB ≈ 31MB
+ */
+void memory_detect(unsigned long magic, unsigned long mbi) {
+    if (magic != 0x2BADB002) {
+        printf("[memory] bad multiboot magic 0x%lx, using 16MB default\n",
+               magic);
+        return;
+    }
+
+    uint32_t *mb = (uint32_t *)(uintptr_t)mbi;
+    uint32_t flags = mb[0];
+
+    if (flags & 1) {   /* bit0: mem_* fields valid */
+        uint32_t mem_upper = mb[2];  /* KB above 1MB */
+        if (mem_upper > 0) {
+            /* 可用物理内存 = 1MB 以上部分 (KB) */
+            uint32_t usable_kb = mem_upper;
+            uint32_t pages = usable_kb * 1024 / PAGE_SIZE;
+
+            if (pages > TOTAL_PAGES) pages = TOTAL_PAGES;
+
+            total_pages = (int)pages;
+            printf("\n===== Memory Detection =====\n");
+            printf("  Detected: %d KB (%d MB)\n",
+                   (int)usable_kb, (int)(usable_kb / 1024));
+            if ((int)pages < TOTAL_PAGES) {
+                printf("  Using:    %d KB (%d MB), %d pages\n",
+                       (int)usable_kb, (int)(usable_kb / 1024), total_pages);
+            } else {
+                printf("  Using:    %d KB (%d MB) capped, %d pages\n",
+                       TOTAL_MEMORY_SIZE/1024, TOTAL_MEMORY_SIZE/1024/1024,
+                       total_pages);
+            }
+            printf("=============================\n\n");
+            return;
+        }
+    }
+
+    printf("[memory] Multiboot: no mem_* info, using %d KB default\n",
+           TOTAL_MEMORY_SIZE / 1024);
+}
+#endif
+
 /* ===================================================================
  *  第二层：内核堆分配器（空闲链表 + 线性兜底）
  * =================================================================== */
@@ -723,6 +777,13 @@ pf_result_t vm_handle_page_fault(page_directory_t *pdir,
         return PF_SEGFAULT;
     }
 
+    /* 权限检查: 写入只读页 → 段错误 */
+    if (is_write && !(vma->flags & VM_WRITABLE)) {
+        printf("[vm] page fault: segfault at 0x%08x (write to RO page)\n",
+               page_aligned);
+        return PF_SEGFAULT;
+    }
+
     /* 分配物理页 */
     void *phys_page = alloc_page();
     if (phys_page == NULL) {
@@ -761,6 +822,7 @@ pf_result_t vm_handle_page_fault(page_directory_t *pdir,
 void memory_init(void) {
     memset(page_used, 0, sizeof(page_used));
     used_pages = 0;
+    /* 注意: total_pages 可能已被 memory_detect() 设置, 不再覆盖 */
 
     kmalloc_offset = 0;
     free_list = NULL;
@@ -818,7 +880,7 @@ int get_free_pages(void)  { return total_pages - used_pages; }
 
 void memory_print_info(void) {
     printf("[Memory Info]\n");
-    printf("total memory : %d KB\n", TOTAL_MEMORY_SIZE / 1024);
+    printf("total memory : %d KB\n", total_pages * PAGE_SIZE / 1024);
     printf("page size    : %d bytes\n", PAGE_SIZE);
     printf("total pages  : %d\n", get_total_pages());
     printf("used pages   : %d\n", get_used_pages());

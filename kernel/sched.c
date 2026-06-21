@@ -246,8 +246,20 @@ void sched_init(void) {
  * ================================================================ */
 void schedule(void) {
     int old_pid = process_get_current_pid();
-    int new_pid = ready_dequeue();
 
+    /* 优先级调度: 从就绪队列选最高优先级 (数值最小) */
+    int new_pid = -1;
+    if (!ready_is_empty()) {
+        int best_idx = ready_front, best_prio = 999;
+        for (int i = 0; i < ready_count; i++) {
+            int idx = (ready_front + i) % MAX_PROCESSES;
+            process_t *p = process_get_by_pid(ready_queue[idx]);
+            int prio = p ? p->priority : 999;
+            if (prio < best_prio) { best_prio = prio; best_idx = idx; }
+        }
+        new_pid = ready_queue[best_idx];
+        ready_remove(new_pid);
+    }
     if (new_pid < 0) new_pid = 0;
     if (old_pid == new_pid) return;
 

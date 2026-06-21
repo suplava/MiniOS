@@ -32,12 +32,22 @@ extern void idt_init(void);
 #include "shell.h"
 #include "test.h"
 
-int kernel_main(void) {
+int kernel_main(unsigned long magic, unsigned long mbi) {
 #ifndef BUILD_QEMU
     setbuf(stdout, NULL);  /* unbuffered for pipe mode */
 #endif
     console_init();
     printk("[MiniOS] boot success\n");
+
+#ifdef BUILD_QEMU
+    {
+        extern void memory_detect(unsigned long magic, unsigned long mbi);
+        printf("[MiniOS] Multiboot: magic=%d mbi=%d\n",
+               (int)magic, (int)(uintptr_t)mbi);
+        memory_detect(magic, mbi);
+    }
+#endif
+
     printk("[MiniOS] kernel_main start\n");
 
     trap_init();
@@ -92,5 +102,5 @@ int kernel_main(void) {
 }
 
 int main(void) {
-    return kernel_main();
+    return kernel_main(0, 0);  /* 本地模式: 无 Multiboot */
 }

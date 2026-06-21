@@ -105,6 +105,7 @@ int        process_get_current_pid(void);
 
 /* 显示 */
 void       process_print_list(void);
+void       process_print_tree(void);
 void       process_print_detail(int pid);
 
 #endif

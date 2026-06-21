@@ -7,7 +7,7 @@
  * 物理内存常量
  * ================================================================ */
 #define PAGE_SIZE            4096
-#define TOTAL_MEMORY_SIZE    (16 * 1024 * 1024)   /* 16 MB 物理内存 */
+#define TOTAL_MEMORY_SIZE    (16 * 1024 * 1024)   /* 16 MB 编译上限, 实际由 Multiboot 探测 */
 #define TOTAL_PAGES          (TOTAL_MEMORY_SIZE / PAGE_SIZE)  /* 4096 页 */
 
 /* ================================================================

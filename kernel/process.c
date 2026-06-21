@@ -106,6 +106,13 @@ void worker_main(void) {
     while (1) { sched_yield(); }
 }
 
+void fork_child_entry(void) {
+    extern int process_get_current_pid(void);
+    printf("[fork] child pid=%d running\n", process_get_current_pid());
+    extern void sched_yield(void);
+    sched_yield();
+}
+
 /* ================================================================
  *  进程表初始化
  * ================================================================ */
@@ -595,10 +602,10 @@ int process_fork(void) {
         vma = vma->next;
     }
 
-    /* 复制父进程的 CPU 上下文 */
-    memcpy(&child->context, &parent->context,
-           sizeof(process_context_t));
-
+    /* 子进程独立入口: fork_child_entry */
+    child->context.esp = (uint32_t)(uintptr_t)child_stack + PAGE_SIZE - 16;
+child->context.eip = (uint32_t)(uintptr_t)fork_child_entry;
+/* 加入就绪队列 */
     /* 加入就绪队列 */
     sched_add_process(child->pid);
 
@@ -865,4 +872,19 @@ void process_print_detail(int pid) {
     printf("  pdir        : %p\n", (void *)proc->pdir);
     printf("  context.eip : 0x%08x\n", proc->context.eip);
     printf("  context.esp : 0x%08x\n", proc->context.esp);
+}
+
+static void print_tree_level(int pid, int lvl) {
+    for (int i = 0; i < MAX_PROCESSES; i++) {
+        process_t *p = &process_table[i];
+        if (p->state==PROC_UNUSED||p->parent_pid!=pid) continue;
+        for (int j=0;j<lvl;j++) printf("  ");
+        printf("|- pid=%d %s [%s]\n",p->pid,p->name,state_to_string(p->state));
+        print_tree_level(p->pid,lvl+1);
+    }
+}
+void process_print_tree(void) {
+    printf("Process Tree:\n|- pid=0 idle [%s]\n",
+           state_to_string(process_table[0].state));
+    print_tree_level(0,1);
 }
