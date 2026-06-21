@@ -36,6 +36,7 @@ char  *strncpy(char *dest, const char *src, size_t n);
 int    strncmp(const char *a, const char *b, size_t n);
 size_t strcspn(const char *s, const char *reject);
 char  *strchr(const char *s, int c);
+char  *strstr(const char *haystack, const char *needle);
 
 /* ── stdio.h 替代 ── */
 int   hal_printf(const char *fmt, ...);
@@ -121,6 +122,18 @@ static inline int __hal_local_cap_printf(const char *fmt, ...) {
         return n;
     }
     va_start(ap, fmt);
+    /* Log VIZ lines to file for dashboard bridge */
+    if (fmt[0] == '[' && fmt[1] == 'V' && fmt[2] == 'I' && fmt[3] == 'Z') {
+        static FILE *viz_fp = 0;
+        va_list ap2;
+        va_copy(ap2, ap);
+        if (!viz_fp) viz_fp = fopen("viz_pipe.txt", "a");
+        if (viz_fp) {
+            vfprintf(viz_fp, fmt, ap2);
+            fflush(viz_fp);
+        }
+        va_end(ap2);
+    }
     ret = vfprintf(stdout, fmt, ap);
     va_end(ap);
     fflush(stdout);

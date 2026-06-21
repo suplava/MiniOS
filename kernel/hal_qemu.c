@@ -461,6 +461,16 @@ char *strchr(const char *s, int c) {
     return NULL;
 }
 
+char *strstr(const char *haystack, const char *needle) {
+    size_t n = strlen(needle);
+    if (n == 0) return (char *)haystack;
+    while (*haystack) {
+        if (strncmp(haystack, needle, n) == 0) return (char *)haystack;
+        haystack++;
+    }
+    return NULL;
+}
+
 int atoi(const char *s) {
     int n = 0, sign = 1;
     while (*s == ' ') s++;

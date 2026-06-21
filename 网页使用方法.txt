@@ -1,0 +1,68 @@
+--------------------------------------------------------环境搭建------------------------------------------------------
+注意：必须按照顺序来，不然打不开网页，网页仅部署在内网，应该也可以部署在服务器上；
+     网页存在一定的漏洞，比如单独刷新网页，后台终端没关，网页会不显示进程，但是tick 20接着跑会继续执行
+
+
+第 1 步：编译
+cd /mnt/hgfs/VS\ code2/Os2/MiniOS
+make clean
+make minios.bin
+第 2 步：开两个终端
+终端 A：用来跑桥接 + 敲 MiniOS 命令
+终端 B：用来跑 QEMU
+第 3 步：终端 A —— 启动桥接
+cd /mnt/hgfs/VS\ code2/Os2/MiniOS
+python3 viz/bridge.py --tcp 5678
+等出现 Dashboard: http://0.0.0.0:8765 后不要关这个窗口。
+
+第 4 步：终端 B —— 启动 QEMU
+cd /mnt/hgfs/VS\ code2/Os2/MiniOS
+然后查 WSL IP：
+hostname -I
+记下这个 IP（比如 172.xx.xx.xx）
+qemu-system-i386 -kernel minios.bin -m 32M -nographic -serial tcp:localhost:5678
+
+第 5 步：Windows 浏览器
+打开 http://<第3步的IP>:8765，仪表盘实时显示。
+
+--------------------------------------------------------测试方法------------------------------------------------------
+测试方法（待完善）：演示# === 面板 1-2：进程表 + 甘特图 ===
+proc
+tick 10
+
+# === 面板 3：调度指标 ===
+fcfs
+tick 5
+rr
+tick 10
+
+# === 面板 4：RAMFS 活动 ===
+touch /log.txt
+write /log.txt MiniOS_Demo
+mkdir /data
+touch /data/config.txt
+rm /log.txt
+
+# === 面板 5：进程状态 ===
+run worker_a
+run worker_b
+tick 15
+block 3
+tick 5
+wakeup 3
+
+# === 面板 6：fork + exec ===
+fork
+exec /bin/hello
+apptest
+
+# === 面板 3：调度指标爆发 ===
+tick 50
+
+# === 收尾 ===
+sched
+ps
+fsinfo
+
+
+网页底部配备可折叠的QEMU终端，实时显示，可全程在网页内部操作，我就调试了几个例子，也有可能功能没覆盖全，多试试

@@ -201,6 +201,12 @@ char console_getchar(void) {
 
 void printk(const char *str) {
     if (str == 0) return;
+    /* Log VIZ lines to file for dashboard bridge */
+    if (str[0] == '[' && str[1] == 'V' && str[2] == 'I' && str[3] == 'Z') {
+        static FILE *viz_fp = 0;
+        if (!viz_fp) viz_fp = fopen("viz_pipe.txt", "a");
+        if (viz_fp) { fputs(str, viz_fp); fflush(viz_fp); }
+    }
 
     if (hal_cap_on && hal_cap_buf) {
         int len = strlen(str);

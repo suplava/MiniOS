@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>WS Test</title>
+<style>body{background:#000;color:#0f0;font:14px monospace;padding:20px} div{margin:4px 0}</style>
+</head><body>
+<h2>WebSocket Test</h2>
+<div>Status: <span id="s" style="color:red">connecting...</span></div>
+<div>Events received: <b id="c">0</b></div>
+<hr>
+<div id="log"></div>
+
+<script>
+const log = document.getElementById('log');
+const ws = new WebSocket(`ws://${location.hostname}:${location.port}/ws`);
+ws.onopen = () => { document.getElementById('s').innerHTML = '<span style="color:lime">CONNECTED</span>'; };
+ws.onclose = () => { document.getElementById('s').innerHTML = '<span style="color:red">DISCONNECTED</span>'; };
+ws.onmessage = (e) => {
+  document.getElementById('c').textContent = parseInt(document.getElementById('c').textContent) + 1;
+  const d = JSON.parse(e.data);
+  const div = document.createElement('div');
+  div.innerHTML = `<span style="color:#888">[${new Date().toLocaleTimeString()}]</span> <b>${d.type}</b> ${JSON.stringify(d)}`;
+  log.insertBefore(div, log.firstChild);
+  if (log.children.length > 50) log.removeChild(log.lastChild);
+};
+ws.onerror = (e) => { document.getElementById('s').innerHTML = '<span style="color:orange">ERROR</span>'; };
+</script>
+</body></html>

@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MiniOS Dashboard</title>
+<style>
+:root {
+  --bg0: #090c10; --bg1: #111820; --bg2: #182230; --bd: #1e3040;
+  --fg0: #c8d6e5; --fg1: #8395a7; --fg2: #576574;
+  --ac: #48b4e0;  --gr: #3ecf8e;  --or: #f0a050;  --rd: #ee5a6f;
+  --pu: #a591ff;  --ye: #f5d060;  --cy: #48dbe0;
+  --font: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg0);color:var(--fg0);font-family:var(--font);overflow:hidden;height:100vh;display:flex;flex-direction:column}
+#header{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;background:var(--bg1);border-bottom:1px solid var(--bd);z-index:10}
+#header h1{font-size:17px;font-weight:600;letter-spacing:0.5px;background:linear-gradient(135deg,var(--ac),var(--cy));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+#header .metrics{display:flex;gap:24px;font-size:12px}
+#term{display:flex;padding:4px 8px;background:var(--bg1);border-top:1px solid var(--bd);gap:6px}
+#term input{flex:1;background:var(--bg0);border:1px solid var(--bd);border-radius:4px;color:var(--fg0);font:13px var(--mono);padding:5px 10px;outline:none}
+#term button{background:var(--ac);color:#000;border:none;border-radius:4px;padding:5px 14px;font-weight:700;cursor:pointer;font-size:12px}
+#term button:hover{opacity:0.85}
+.metric{display:flex;align-items:center;gap:6px;color:var(--fg1)}
+.metric .label{font-size:10px;text-transform:uppercase;letter-spacing:1px}
+.metric .value{font-size:16px;font-weight:700;color:var(--fg0);font-family:var(--mono)}
+.metric .unit{font-size:10px;color:var(--fg2)}
+#status-dot{width:8px;height:8px;border-radius:50%;background:var(--rd);box-shadow:0 0 6px var(--rd)}
+#status-dot.on{background:var(--gr);box-shadow:0 0 8px var(--gr)}
+#main{flex:1;display:grid;grid-template-columns:1.1fr 0.9fr;grid-template-rows:1fr 1fr 0.9fr;gap:6px;padding:6px;overflow:hidden}
+#term_area{display:flex;flex-direction:column;border-top:2px solid var(--bd);max-height:200px;min-height:0;overflow:hidden;transition:max-height 0.3s}
+#term_area.closed{max-height:28px}
+#term_toggle{display:flex;align-items:center;justify-content:space-between;padding:4px 12px;background:var(--bg2);cursor:pointer;font-size:11px;color:var(--fg2);user-select:none}
+#term_toggle:hover{color:var(--ac)}
+#term_toggle .arrow{transition:transform 0.3s;display:inline-block}
+#term_area.closed .arrow{transform:rotate(-90deg)}
+#term_out{flex:1;overflow:auto;font:11px 'Consolas','Cascadia Code','Courier New',monospace;padding:4px 12px;background:var(--bg0);white-space:pre;line-height:1.4;color:var(--fg1);min-height:0}
+#term_out .viz{color:#3a4a58;font-size:10px}
+#term_out .prompt{color:var(--ac)}
+.card{background:var(--bg1);border:1px solid var(--bd);border-radius:8px;overflow:hidden;display:flex;flex-direction:column}
+.card-header{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:var(--bg2);border-bottom:1px solid var(--bd);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--fg2)}
+.card-header .badge{font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(72,180,224,0.15);color:var(--ac)}
+.card-body{flex:1;position:relative;overflow:hidden}
+canvas{display:block;width:100%;height:100%}
+.tooltip{position:absolute;padding:6px 10px;background:rgba(0,0,0,0.9);border:1px solid var(--bd);border-radius:4px;font-size:11px;pointer-events:none;display:none;z-index:20;color:var(--fg0);font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div id="header">
+  <h1>MiniOS · Real-Time Kernel Dashboard</h1>
+  <div class="metrics">
+    <div class="metric"><div id="status-dot"></div><span class="label">WS</span></div>
+    <div class="metric"><span class="label">Events</span><span class="value" id="m_events">0</span></div>
+    <div class="metric"><span class="label">Switches</span><span class="value" id="m_sw">0</span></div>
+    <div class="metric"><span class="label">Ticks</span><span class="value" id="m_tk">0</span></div>
+    <div class="metric"><span class="label">Procs</span><span class="value" id="m_pc">0</span></div>
+    <div class="metric"><span class="label">Algo</span><span class="value" id="m_al" style="font-size:13px">RR</span></div>
+    <div class="metric"><span class="label">Slice</span><span class="value" id="m_sl" style="font-size:13px">10</span></div>
+  </div>
+</div>
+<div id="main">
+  <div class="card"><div class="card-header">Process Scheduler Gantt<span class="badge" id="gantt_algo">RR</span></div><div class="card-body"><canvas id="c_gantt"></canvas></div></div>
+  <div class="card"><div class="card-header">Process Table<span class="badge" id="proc_badge">0</span></div><div class="card-body"><canvas id="c_proc"></canvas></div></div>
+  <div class="card"><div class="card-header">CPU Tick Timeline</div><div class="card-body"><canvas id="c_cpu"></canvas></div></div>
+  <div class="card"><div class="card-header">Scheduler Metrics</div><div class="card-body"><canvas id="c_sched"></canvas></div></div>
+  <div class="card"><div class="card-header">RAMFS Activity<span class="badge" id="ramfs_badge">0</span></div><div class="card-body"><canvas id="c_ramfs"></canvas></div></div>
+  <div class="card"><div class="card-header">Event Log<span class="badge" id="log_badge">0</span></div><div class="card-body"><canvas id="c_log"></canvas></div></div>
+</div>
+<div id="term_area">
+  <div id="term_toggle" onclick="var t=document.getElementById('term_area');t.classList.toggle('closed')">
+    <span><span class="arrow">&#9660;</span> Terminal Output</span>
+    <span class="badge" id="term_lines" style="font-size:10px;background:rgba(72,180,224,0.15);color:var(--ac);padding:1px 8px;border-radius:8px">0</span>
+  </div>
+  <div id="term_out">Waiting for MiniOS output...</div>
+</div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+// ═══════════════════════════════════════════
+//  State
+// ═══════════════════════════════════════════
+const procs = new Map();
+const gantt = [];
+const ticks = [];
+const ramfs = [];
+const logs  = [];
+let swCnt = 0, tkCnt = 0, evCnt = 0, algo = 'RR', slice = 10;
+const MAX_GANTT = 200, MAX_TICKS = 300, MAX_LOGS = 30, MAX_RAMFS = 15;
+
+const PID_COLORS = [
+  '#48b4e0','#3ecf8e','#f0a050','#ee5a6f','#a591ff',
+  '#f5d060','#48dbe0','#ff8a80','#b2ff59','#82b1ff',
+  '#ff80ab','#84ffff','#ffd740','#7c4dff','#69f0ae'
+];
+function pColor(pid) { return PID_COLORS[Math.abs(pid) % PID_COLORS.length]; }
+const stateColor = {
+  RUNNING:'#3ecf8e', READY:'#f0a050', BLOCKED:'#ee5a6f',
+  ZOMBIE:'#8395a7', UNUSED:'#576574'
+};
+
+// ═══════════════════════════════════════════
+//  Canvas helpers
+// ═══════════════════════════════════════════
+function setupCanvas(id) {
+  const c = document.getElementById(id);
+  const dpr = window.devicePixelRatio || 1;
+  const rect = c.parentElement.getBoundingClientRect();
+  c.width = rect.width * dpr;
+  c.height = rect.height * dpr;
+  c.style.width = rect.width + 'px';
+  c.style.height = rect.height + 'px';
+  const ctx = c.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return { c, ctx, w: rect.width, h: rect.height };
+}
+
+// ═══════════════════════════════════════════
+//  Gantt Chart
+// ═══════════════════════════════════════════
+function drawGantt() {
+  const { ctx, w, h } = setupCanvas('c_gantt');
+  if (!w || !h) return;
+  ctx.clearRect(0, 0, w, h);
+
+  // Background grid
+  ctx.strokeStyle = '#1a2a38'; ctx.lineWidth = 0.5;
+  for (let i = 0; i < 6; i++) {
+    const y = 20 + (h - 30) * i / 5;
+    ctx.beginPath(); ctx.moveTo(30, y); ctx.lineTo(w - 10, y); ctx.stroke();
+  }
+
+  // Axes
+  ctx.strokeStyle = '#2a3a48'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(30, h - 20); ctx.lineTo(w - 10, h - 20); ctx.stroke();
+  ctx.fillStyle = '#576574'; ctx.font = '9px monospace';
+  ctx.fillText('time →', w - 45, h - 6);
+  ctx.fillText('PID', 4, 12);
+
+  if (gantt.length < 1) { ctx.fillStyle = '#3a4a58'; ctx.fillText('waiting for sched events...', w/2-80, h/2); return; }
+
+  // Collect unique PIDs
+  const pids = [...new Set(gantt.map(g => g.pid))].sort();
+  const rowH = Math.min((h - 30) / Math.max(pids.length, 1), 22);
+  const totalW = w - 50;
+
+  // Draw PID labels
+  pids.forEach((pid, i) => {
+    const y = 20 + i * rowH + rowH / 2 + 4;
+    ctx.fillStyle = pColor(pid); ctx.font = 'bold 10px monospace';
+    ctx.fillText('PID' + pid, 2, y);
+  });
+
+  // Draw bars
+  const visible = gantt.slice(-Math.floor(totalW / 2));
+  const startT = visible[0]?.t || 0;
+  const endT = visible[visible.length - 1]?.t || 1;
+  const timeRange = Math.max(endT - startT, 1);
+
+  // Build intervals
+  const intervals = [];
+  let cur = null;
+  for (const g of visible) {
+    if (!cur || cur.pid !== g.pid) {
+      if (cur && cur.len > 0) intervals.push(cur);
+      cur = { pid: g.pid, start: g.t, len: 1 };
+    } else {
+      cur.len++;
+    }
+  }
+  if (cur && cur.len > 0) intervals.push(cur);
+
+  intervals.forEach(iv => {
+    const x = 40 + ((iv.start - startT) / timeRange) * totalW;
+    const wBar = Math.max((iv.len / timeRange) * totalW, 1.5);
+    const row = pids.indexOf(iv.pid);
+    const y = 20 + row * rowH + 2;
+    const hBar = rowH - 4;
+
+    // Bar with gradient
+    const color = pColor(iv.pid);
+    const grad = ctx.createLinearGradient(x, y, x, y + hBar);
+    grad.addColorStop(0, color);
+    grad.addColorStop(1, color + '88');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.roundRect(x, y, wBar, hBar, 3);
+    ctx.fill();
+
+    // PID label on bar
+    if (wBar > 20) {
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 8px monospace';
+      ctx.fillText(iv.pid, x + 3, y + hBar / 2 + 3);
+    }
+  });
+
+  // Algo indicator
+  document.getElementById('gantt_algo').textContent = algo;
+}
+
+// ═══════════════════════════════════════════
+//  Process Table
+// ═══════════════════════════════════════════
+function drawProc() {
+  const { ctx, w, h } = setupCanvas('c_proc');
+  if (!w || !h) return;
+  ctx.clearRect(0, 0, w, h);
+
+  const list = [...procs.entries()].sort((a, b) => a[0] - b[0]);
+  document.getElementById('proc_badge').textContent = list.length;
+
+  if (list.length === 0) {
+    ctx.fillStyle = '#576574'; ctx.font = '12px sans-serif';
+    ctx.fillText('No processes — type proc in MiniOS', w/2-130, h/2);
+    return;
+  }
+
+  // Responsive column widths: PID 8%, Name 30%, State 20%, PPID 12%, Ticks 18%, CPU 12%
+  const colPct = [0.08, 0.30, 0.20, 0.12, 0.18, 0.12];
+  const colX = colPct.map((_, i) => colPct.slice(0, i).reduce((s, v) => s + v, 0) * w);
+  const cols = ['PID', 'Name', 'State', 'PPID', 'Ticks', 'CPU'];
+
+  const headerH = 28;
+  const rowH = Math.min((h - headerH - 10) / Math.max(list.length, 1), 36);
+
+  // Header background
+  ctx.fillStyle = '#182230'; ctx.fillRect(0, 0, w, headerH);
+  // Column separators
+  colX.forEach(x => {
+    ctx.strokeStyle = '#1e3040'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, 6); ctx.lineTo(x, headerH - 6); ctx.stroke();
+  });
+  // Header text
+  ctx.fillStyle = '#8395a7'; ctx.font = 'bold 11px sans-serif';
+  cols.forEach((col, i) => {
+    const cx = colX[i] + (colX[i+1] || w) - colX[i];
+    ctx.fillText(col, colX[i] + 10, 20);
+  });
+
+  // Separator line
+  ctx.strokeStyle = '#1e3040'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, headerH); ctx.lineTo(w, headerH); ctx.stroke();
+
+  // Rows
+  const maxTicks = Math.max(...list.map(([,pp]) => pp.ticks || 0), 1);
+
+  list.forEach(([pid, p], ri) => {
+    const ry = headerH + ri * rowH;
+    const cy = ry + rowH / 2;  // text baseline
+
+    // Row bg
+    if (ri % 2 === 0) {
+      ctx.fillStyle = '#111820'; ctx.fillRect(0, ry, w, rowH);
+    }
+
+    // Row separator
+    ctx.strokeStyle = '#1a2a38'; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(0, ry); ctx.lineTo(w, ry); ctx.stroke();
+
+    // PID — colored badge
+    const pidColor = pColor(pid);
+    ctx.fillStyle = pidColor + '22';
+    ctx.beginPath(); ctx.roundRect(colX[0] + 6, ry + 6, 28, rowH - 12, 4); ctx.fill();
+    ctx.fillStyle = pidColor; ctx.font = 'bold 12px monospace';
+    ctx.fillText('' + pid, colX[0] + 12, cy + 4);
+
+    // Name — truncate if too long
+    const nameW = (colX[2] - colX[1]) * 0.85;
+    ctx.fillStyle = '#c8d6e5'; ctx.font = '11px sans-serif';
+    let name = p.name || '?';
+    while (ctx.measureText(name).width > nameW && name.length > 1) {
+      name = name.slice(0, -1);
+    }
+    if (name !== (p.name || '?')) name += '…';
+    ctx.fillText(name, colX[1] + 10, cy + 4);
+
+    // State — colored pill
+    const sc = stateColor[p.state] || '#8395a7';
+    const sx = colX[2] + 8;
+    ctx.fillStyle = sc + '33';
+    ctx.beginPath(); ctx.roundRect(sx, ry + 6, 70, rowH - 12, 10); ctx.fill();
+    ctx.fillStyle = sc; ctx.font = 'bold 10px sans-serif';
+    ctx.fillText(p.state, sx + 10, cy + 4);
+
+    // PPID
+    ctx.fillStyle = '#8395a7'; ctx.font = '11px monospace';
+    ctx.fillText('' + (p.ppid ?? '-'), colX[3] + 12, cy + 4);
+
+    // Ticks
+    ctx.fillStyle = '#c8d6e5'; ctx.font = 'bold 12px monospace';
+    ctx.fillText('' + (p.ticks || 0), colX[4] + 12, cy + 4);
+
+    // CPU mini bar
+    const cpuPct = Math.round((p.ticks || 0) / maxTicks * 100);
+    const barX = colX[5] + 6, barW = w - colX[5] - 18, barH = rowH - 16, barY = ry + 8;
+    ctx.fillStyle = '#1a2a38'; ctx.beginPath();
+    ctx.roundRect(barX, barY, barW, barH, 3); ctx.fill();
+    if (cpuPct > 0) {
+      const fillW = (cpuPct / 100) * barW;
+      const grad = ctx.createLinearGradient(barX, 0, barX + barW, 0);
+      grad.addColorStop(0, pColor(pid)); grad.addColorStop(1, pColor(pid) + '66');
+      ctx.fillStyle = grad; ctx.beginPath();
+      ctx.roundRect(barX, barY, Math.max(fillW, 3), barH, 3); ctx.fill();
+    }
+    ctx.fillStyle = '#8395a7'; ctx.font = '9px monospace';
+    ctx.fillText(cpuPct + '%', barX + barW + 3, barY + barH - 1);
+  });
+}
+
+// ═══════════════════════════════════════════
+//  CPU Timeline
+// ═══════════════════════════════════════════
+function drawCpu() {
+  const { ctx, w, h } = setupCanvas('c_cpu');
+  if (!w || !h) return;
+  ctx.clearRect(0, 0, w, h);
+
+  // Grid
+  ctx.strokeStyle = '#1a2a38'; ctx.lineWidth = 0.5;
+  for (let i = 0; i < 5; i++) {
+    const y = 14 + (h - 34) * i / 4;
+    ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(w - 10, y); ctx.stroke();
+  }
+
+  // Y axis labels
+  ctx.fillStyle = '#576574'; ctx.font = '9px monospace';
+  const maxVal = Math.max(...ticks.map(t => t.v), 10);
+  for (let i = 0; i < 5; i++) {
+    const v = Math.round(maxVal * (4 - i) / 4);
+    ctx.fillText('' + v, 2, 18 + (h - 34) * i / 4);
+  }
+  ctx.fillText('ticks', 2, h - 4);
+
+  if (ticks.length < 2) { ctx.fillStyle = '#3a4a58'; ctx.fillText('waiting for tick events...', w/2-80, h/2); return; }
+
+  // Line chart
+  const plotW = w - 50, plotH = h - 34, plotX = 40, plotY = 14;
+  const step = plotW / (ticks.length - 1);
+
+  // Fill
+  ctx.beginPath();
+  ctx.moveTo(plotX, plotY + plotH);
+  ticks.forEach((t, i) => {
+    const x = plotX + i * step;
+    const y = plotY + plotH - (t.v / maxVal) * plotH;
+    ctx.lineTo(x, y);
+  });
+  ctx.lineTo(plotX + (ticks.length - 1) * step, plotY + plotH);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(0, plotY, 0, plotY + plotH);
+  grad.addColorStop(0, 'rgba(72,180,224,0.25)');
+  grad.addColorStop(1, 'rgba(72,180,224,0.02)');
+  ctx.fillStyle = grad; ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  ticks.forEach((t, i) => {
+    const x = plotX + i * step;
+    const y = plotY + plotH - (t.v / maxVal) * plotH;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#48b4e0'; ctx.lineWidth = 2; ctx.stroke();
+
+  // Dots at switch points
+  gantt.filter(g => ticks.some(t => Math.abs(t.t - g.t) < 1)).forEach(g => {
+    if (g.t === undefined) return;
+    const idx = ticks.findIndex(t => Math.abs(t.t - g.t) < 2);
+    if (idx < 0) return;
+    const x = plotX + idx * step;
+    const y = plotY + plotH - ((ticks[idx]?.v || 0) / maxVal) * plotH;
+    ctx.fillStyle = pColor(g.pid); ctx.beginPath();
+    ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+  });
+}
+
+// ═══════════════════════════════════════════
+//  Scheduler Metrics + RAMFS
+// ═══════════════════════════════════════════
+function drawSched() {
+  const { ctx, w, h } = setupCanvas('c_sched');
+  if (!w || !h) return;
+  ctx.clearRect(0, 0, w, h);
+
+  const metrics = [
+    { label: 'Switches', value: swCnt, color: '#48b4e0', max: Math.max(swCnt, 5) },
+    { label: 'Ticks',    value: tkCnt, color: '#a591ff', max: Math.max(tkCnt, 5) },
+    { label: 'Algorithm', value: algo,  color: algo === 'RR' ? '#3ecf8e' : '#f0a050', max: '' }
+  ];
+
+  metrics.forEach((m, i) => {
+    const y = 16 + i * 52;
+    ctx.fillStyle = '#8395a7'; ctx.font = '11px sans-serif';
+    ctx.fillText(m.label, 12, y + 14);
+
+    if (m.label === 'Algorithm') {
+      const pillW = 70, pillH = 24;
+      ctx.fillStyle = m.color + '33';
+      ctx.beginPath(); ctx.roundRect(12, y + 20, pillW, pillH, 12); ctx.fill();
+      ctx.fillStyle = m.color; ctx.font = 'bold 14px monospace';
+      ctx.fillText(m.value, 12 + pillW/2 - ctx.measureText(m.value).width/2, y + 37);
+    } else {
+      const barW = w - 140, barH = 22, barX = 12, barY = y + 20;
+      ctx.fillStyle = '#1a2a38'; ctx.beginPath();
+      ctx.roundRect(barX, barY, barW, barH, 4); ctx.fill();
+
+      const fillW = Math.min(m.value / m.max * barW, barW);
+      if (fillW > 0) {
+        const grad = ctx.createLinearGradient(barX, 0, barX + barW, 0);
+        grad.addColorStop(0, m.color); grad.addColorStop(1, m.color + '88');
+        ctx.fillStyle = grad; ctx.beginPath();
+        ctx.roundRect(barX, barY, fillW, barH, 4); ctx.fill();
+      }
+
+      ctx.fillStyle = '#c8d6e5'; ctx.font = 'bold 13px monospace';
+      ctx.fillText('' + m.value, barX + barW + 8, barY + 17);
+    }
+  });
+}
+
+function drawRamfs() {
+  const { ctx, w, h } = setupCanvas('c_ramfs');
+  if (!w || !h) return;
+  ctx.clearRect(0, 0, w, h);
+
+  document.getElementById('ramfs_badge').textContent = ramfs.length;
+
+  if (ramfs.length === 0) {
+    ctx.fillStyle = '#576574'; ctx.font = '12px sans-serif';
+    ctx.fillText('No FS events - try: touch /x.txt', w/2-110, h/2);
+    return;
+  }
+
+  const recent = ramfs.slice(0, 10);
+  const colors = { create: '#3ecf8e', write: '#48b4e0', mkdir: '#f5d060', delete: '#ee5a6f' };
+  const rowH = Math.min((h - 10) / recent.length, 28);
+
+  recent.forEach((r, i) => {
+    const y = 8 + i * rowH;
+    const c = colors[r.type] || '#8395a7';
+
+    ctx.fillStyle = c + '33';
+    ctx.beginPath(); ctx.roundRect(8, y + 4, 52, rowH - 8, 6); ctx.fill();
+    ctx.fillStyle = c; ctx.font = 'bold 9px monospace';
+    ctx.fillText(r.type.toUpperCase(), 14, y + rowH/2 + 4);
+
+    let path = r.file || '';
+    if (path.length > 28) path = '...' + path.slice(-25);
+    ctx.fillStyle = '#8395a7'; ctx.font = '10px monospace';
+    ctx.fillText(path, 70, y + rowH/2 + 4);
+  });
+}
+
+function drawLog() {
+  const { ctx, w, h } = setupCanvas('c_log');
+  if (!w || !h) return;
+  ctx.clearRect(0, 0, w, h);
+
+  document.getElementById('log_badge').textContent = logs.length;
+
+  if (logs.length === 0) {
+    ctx.fillStyle = '#576574'; ctx.font = '12px sans-serif';
+    ctx.fillText('No events yet', w/2-50, h/2);
+    return;
+  }
+
+  const recent = logs.slice(0, 15);
+  const rowH = Math.min((h - 4) / recent.length, 22);
+
+  recent.forEach((l, i) => {
+    const y = 4 + i * rowH;
+    const c = l.type.startsWith('sched_switch') ? '#48b4e0' :
+              l.type.startsWith('sched_tick') ? '#a591ff' :
+              l.type.startsWith('proc') ? '#3ecf8e' :
+              l.type.startsWith('ramfs') ? '#f0883e' : '#8395a7';
+
+    ctx.fillStyle = c; ctx.font = 'bold 8px monospace';
+    ctx.fillText(l.type.padEnd(14), 6, y + rowH - 4);
+
+    ctx.fillStyle = '#576574'; ctx.font = '8px monospace';
+    let detail = JSON.stringify(l).replace(/"_[^"]*":\d+,?/g,'').replace(/[{}"]/g,'');
+    if (detail.length > 50) detail = detail.slice(0,47) + '...';
+    ctx.fillText(detail, 94, y + rowH - 4);
+  });
+}
+
+// ═══════════════════════════════════════════
+//  WebSocket
+// ═══════════════════════════════════════════
+const ws = new WebSocket(`ws://${location.hostname}:${location.port}/ws`);
+ws.onopen = () => {
+  document.getElementById('status-dot').classList.add('on');
+};
+ws.onclose = () => {
+  document.getElementById('status-dot').classList.remove('on');
+  setTimeout(() => location.reload(), 2000);
+};
+ws.onmessage = (e) => {
+  try {
+    const d = JSON.parse(e.data);
+    // Show last event in header
+    document.getElementById('m_al').textContent = d.type || '?';
+    document.getElementById('m_al').style.color = '#f5d060';
+    setTimeout(()=>{ document.getElementById('m_al').style.color = ''; }, 300);
+    handle(d);
+  } catch (err) {
+    document.getElementById('m_events').textContent = 'ERR';
+  }
+};
+
+function handle(d) {
+  evCnt++; document.getElementById('m_events').textContent = evCnt;
+  logs.unshift(d); if (logs.length > MAX_LOGS) logs.pop();
+
+  switch (d.type) {
+  case 'sched_switch':
+    swCnt++; document.getElementById('m_sw').textContent = swCnt;
+    gantt.push({ pid: d.to, t: gantt.length, algo: d.algo });
+    if (gantt.length > MAX_GANTT) gantt.shift();
+    drawGantt(); drawSched(); drawRamfs(); drawLog(); break;
+
+  case 'sched_tick':
+    tkCnt++; document.getElementById('m_tk').textContent = tkCnt;
+    ticks.push({ t: ticks.length, v: tkCnt, pid: d.pid });
+    if (ticks.length > MAX_TICKS) ticks.shift();
+    if (procs.has(d.pid)) procs.get(d.pid).ticks = d.total;
+    drawCpu(); drawProc(); break;
+
+  case 'sched_algo':
+    algo = d.algo; document.getElementById('m_al').textContent = algo;
+    document.getElementById('gantt_algo').textContent = algo;
+    drawSched(); drawRamfs(); drawLog(); break;
+
+  case 'sched_slice':
+    slice = d.slice; document.getElementById('m_sl').textContent = slice; break;
+
+  case 'proc_create':
+    procs.set(d.pid, { name: d.name, ppid: d.ppid, state: 'READY', ticks: 0 });
+    document.getElementById('m_pc').textContent = procs.size;
+    drawProc(); break;
+
+  case 'proc_state':
+    if (procs.has(d.pid)) { procs.get(d.pid).state = d.new; drawProc(); }
+    break;
+
+  case 'proc_kill':
+    procs.delete(d.pid);
+    document.getElementById('m_pc').textContent = procs.size;
+    drawProc(); break;
+
+  case 'ramfs_create': case 'ramfs_write': case 'ramfs_delete': case 'ramfs_mkdir':
+    ramfs.unshift({ type: d.type.replace('ramfs_', ''), file: d.file || d.path });
+    if (ramfs.length > MAX_RAMFS) ramfs.pop();
+    drawSched(); drawRamfs(); drawLog(); break;
+  case 'term':
+    var tel = document.getElementById('term_out');
+    // Clear initial placeholder
+    if (tel._init !== false) { tel.innerHTML = ''; tel._init = false; }
+    var cls = d.line && d.line.indexOf('[VIZ]')>=0 ? 'viz' : '';
+    var txt = d.line || '';
+    var div = document.createElement('div');
+    div.className = cls;
+    div.textContent = txt;
+    tel.appendChild(div);
+    // Limit to last 500 lines
+    while (tel.children.length > 500) tel.removeChild(tel.firstChild);
+    tel.scrollTop = tel.scrollHeight;
+    var n = parseInt(document.getElementById('term_lines').textContent || '0') + 1;
+    document.getElementById('term_lines').textContent = n;
+    break;
+  }
+}
+
+// ═══════════════════════════════════════════
+//  Init & Resize
+// ═══════════════════════════════════════════
+function redrawAll() {
+  drawGantt(); drawProc(); drawCpu(); drawSched(); drawRamfs(); drawLog();
+}
+
+// Resize observer
+const mainEl = document.getElementById('main');
+const ro = new ResizeObserver(() => redrawAll());
+mainEl.querySelectorAll('.card-body').forEach(el => ro.observe(el));
+
+// Initial draw
+setTimeout(redrawAll, 200);
+
+// Periodic refresh for smooth animation
+setInterval(() => { drawGantt(); drawCpu(); }, 2000);
+
+</script>
+<div id="term">
+  <span style="color:var(--fg2);font:13px monospace;padding:5px 0">MiniOS></span>
+  <input id="term_input" placeholder="Type command here (proc, tick 20, ls...)">
+  <button onclick="var c=document.getElementById('term_input');if(c.value&&ws.readyState===WebSocket.OPEN){ws.send(c.value);c.value=''}">Send</button>
+</div>
+<script>
+document.getElementById('term_input').onkeydown = function(e) {
+  if (e.key === 'Enter') {
+    var cmd = this.value;
+    if (cmd && ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(cmd);
+      this.value = '';
+    }
+  }
+};
+</script>
+</body>
+</html>

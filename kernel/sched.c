@@ -118,6 +118,7 @@ void sched_remove_process(int pid) {
 void sched_set_algo(sched_algo_t algo) {
     current_algo = algo;
     printf("[sched] algorithm switched to %s\n", sched_algo_name());
+    printf("[VIZ]{\"type\":\"sched_algo\",\"algo\":\"%s\"}\n", algo == SCHED_RR ? "RR" : "FCFS");
 }
 
 sched_algo_t sched_get_algo(void) { return current_algo; }
@@ -131,6 +132,7 @@ void sched_set_time_slice(int ticks) {
     if (ticks > 100) ticks = 100;
     g_time_slice = ticks;
     printf("[sched] time slice set to %d ticks\n", g_time_slice);
+    printf("[VIZ]{\"type\":\"sched_slice\",\"slice\":%d}\n", g_time_slice);
 }
 
 int sched_get_time_slice(void) { return g_time_slice; }
@@ -262,6 +264,7 @@ void schedule(void) {
     process_set_current(new_pid);
     new_proc->time_slice = g_time_slice;
     sched_switch_count++;
+    printf("[VIZ]{\"type\":\"sched_switch\",\"from\":%d,\"to\":%d,\"algo\":\"%s\",\"ready\":%d}\n", old_pid, new_pid, current_algo == SCHED_RR ? "RR" : "FCFS", ready_count);
 
     /* 每 100 次切换输出 */
 
@@ -297,6 +300,7 @@ void sched_tick(void) {
     /* 递减时间片 */
     current->time_slice--;
     current->total_ticks++;
+    printf("[VIZ]{\"type\":\"sched_tick\",\"pid\":%d,\"left\":%d,\"total\":%d,\"algo\":\"%s\"}\n", current->pid, current->time_slice, current->total_ticks, current_algo == SCHED_RR ? "RR" : "FCFS");
 
     /*
      * FCFS 模式: 不检查时间片, 进程一直运行到主动让出
@@ -345,6 +349,7 @@ void sched_block(void) {
         return;
     }
     printf("[sched] blocking pid %d\n", current->pid);
+    printf("[VIZ]{\"type\":\"sched_block\",\"pid\":%d}\n", current->pid);
     process_block(current->pid);
     schedule();
 }
@@ -356,6 +361,7 @@ void sched_wakeup(int pid) {
         return;
     }
     printf("[sched] waking up pid %d\n", pid);
+    printf("[VIZ]{\"type\":\"sched_wakeup\",\"pid\":%d}\n", pid);
     process_wakeup(pid);
     ready_enqueue(pid);
 }

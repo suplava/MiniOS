@@ -237,6 +237,7 @@ int process_create(const char *name) {
     printf("[process] pid  = %d\n", proc->pid);
     printf("[process] name = %s\n", proc->name);
     printf("[process] parent_pid = %d\n", proc->parent_pid);
+    printf("[VIZ]{\"type\":\"proc_create\",\"pid\":%d,\"name\":\"%s\",\"ppid\":%d}\n", proc->pid, proc->name, proc->parent_pid);
 
     /* 将新进程加入调度器的就绪队列 */
     sched_add_process(proc->pid);
@@ -338,6 +339,7 @@ int process_kill(int pid) {
             }
 
             printf("[process] kill process ok, pid = %d\n", pid);
+            printf("[VIZ]{\"type\":\"proc_kill\",\"pid\":%d}\n", pid);
             return 0;
         }
     }
@@ -404,6 +406,7 @@ int process_set_state(int pid, process_state_t new_state) {
             }
 
             process_table[i].state = new_state;
+            printf("[VIZ]{\"type\":\"proc_state\",\"pid\":%d,\"old\":\"%s\",\"new\":\"%s\"}\n", pid, state_to_string(old), state_to_string(new_state));
             return 0;
         }
     }
@@ -602,6 +605,7 @@ int process_fork(void) {
     printf("[fork] child pid=%d created from parent pid=%d (%s)\n",
            child->pid, parent->pid, parent->name);
     printf("[fork] deep-copied address space + VMA list\n");
+    printf("[VIZ]{\"type\":\"proc_fork\",\"child\":%d,\"parent\":%d}\n", child->pid, parent->pid);
 
     return child->pid;  /* 返回子进程 PID 给父进程 */
 }

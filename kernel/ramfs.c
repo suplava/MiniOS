@@ -20,6 +20,7 @@
 
 #include "ramfs.h"
 #include "console.h"
+#include "hal.h"
 
 static ramfs_node_t node_table[RAMFS_MAX_NODES];
 static ramfs_fd_t fd_table[RAMFS_MAX_FD];
@@ -384,6 +385,7 @@ int ramfs_mkdir(const char *path) {
     printk("[ramfs] mkdir ok: ");
     printk(path);
     printk("\n");
+    printf("[VIZ]{\"type\":\"ramfs_mkdir\",\"path\":\"%s\"}\n", path);
 
     return 0;
 }
@@ -459,6 +461,7 @@ int ramfs_create_file(const char *path) {
     printk("[ramfs] create file ok: ");
     printk(path);
     printk("\n");
+    printf("[VIZ]{\"type\":\"ramfs_create\",\"file\":\"%s\"}\n", path);
 
     return 0;
 }
@@ -493,6 +496,7 @@ int ramfs_write_file(const char *path, const char *content) {
     printk("[ramfs] write file ok: ");
     printk(path);
     printk("\n");
+    printf("[VIZ]{\"type\":\"ramfs_write\",\"file\":\"%s\",\"size\":%d}\n", path, node_table[idx].size);
 
     return 0;
 }
@@ -559,6 +563,7 @@ int ramfs_delete_file(const char *path) {
     printk("[ramfs] delete ok: ");
     printk(path);
     printk("\n");
+    printf("[VIZ]{\"type\":\"ramfs_delete\",\"file\":\"%s\"}\n", path);
 
     return 0;
 }

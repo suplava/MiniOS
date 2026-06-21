@@ -33,6 +33,9 @@ extern void idt_init(void);
 #include "test.h"
 
 int kernel_main(void) {
+#ifndef BUILD_QEMU
+    setbuf(stdout, NULL);  /* unbuffered for pipe mode */
+#endif
     console_init();
     printk("[MiniOS] boot success\n");
     printk("[MiniOS] kernel_main start\n");
@@ -54,7 +57,10 @@ int kernel_main(void) {
      * 本地模式：
      * 自动运行完整自检，方便在 VSCode / Windows 终端验证功能。
      */
-    kernel_test();
+    if (getenv("MINIOS_VIZ") == NULL)
+        kernel_test();
+    else
+        printk("[MiniOS] VIZ mode: skip auto self-test\n");
 #else
     /*
      * QEMU 模式：
