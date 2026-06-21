@@ -22,6 +22,7 @@ SRC_LOCAL = kernel/main.c \
             kernel/sched.c \
             kernel/sync.c \
             kernel/ramfs.c \
+            kernel/userprog.c \
             kernel/shell.c \
             kernel/test.c
 
@@ -50,6 +51,7 @@ SRC_QEMU = kernel/main.c \
            kernel/sched.c \
            kernel/sync.c \
            kernel/ramfs.c \
+           kernel/userprog.c \
            kernel/shell.c \
            kernel/test.c
 

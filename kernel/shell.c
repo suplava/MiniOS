@@ -18,6 +18,7 @@
 #include "syscall.h"
 #include "test.h"
 #include "trap.h"
+#include "userprog.h"
 
 #define CMD_BUF_SIZE 256
 
@@ -28,7 +29,10 @@ static void shell_help(void) {
     printf("  ps                   show process information\n");
     printf("  run <name>           create a test process\n");
     printf("  fork                 fork current process\n");
-    printf("  exec <name>          replace process image\n");
+    printf("  exec <app> [args]    load and run MiniExec user program\n");
+    printf("  pexec <name>         simulate process_exec replacement\n");
+    printf("  apps                 list MiniExec user programs\n");
+    printf("  apptest              run MiniExec user program tests\n");
     printf("  wait                 wait for child process\n");
     printf("  kill <pid>           kill a process\n");
     printf("  block <pid>          block a process (simulate I/O wait)\n");
@@ -45,6 +49,16 @@ static void shell_help(void) {
     printf("  write <file> <text>  write text to file\n");
     printf("  rm <file>            delete a file\n");
     printf("  fsinfo               show RAMFS filesystem statistics\n");
+    printf("  mkdir <dir>          create directory\n");
+    printf("  cd <dir>             change current directory\n");
+    printf("  pwd                  show current directory\n");
+    printf("  mkfs                 format RAMFS\n");
+    printf("  open <file>          open file and return fd\n");
+    printf("  close <fd>           close fd\n");
+    printf("  readfd <fd> <len>    read from fd\n");
+    printf("  writefd <fd> <text>  write text to fd\n");
+    printf("  seek <fd> <offset>   change fd offset\n");
+    printf("  fdtest               run fd/seek demo\n");
     printf("  echo <text>          print text\n");
     printf("  clear                clear screen\n");
     printf("  test                 run all MiniOS test cases\n");
@@ -94,12 +108,65 @@ static void handle_write_command(char *cmd) {
 
     ramfs_write_file(filename, content);
 }
+static void handle_writefd_command(char *cmd) {
+    char *p = cmd + 8;
+
+    while (*p == ' ') p++;
+
+    int fd = atoi(p);
+
+    while (*p != '\0' && *p != ' ') p++;
+    while (*p == ' ') p++;
+
+    if (*p == '\0') {
+        printf("usage: writefd <fd> <text>\n");
+        return;
+    }
+
+    int len = strlen(p);
+    int n = ramfs_write(fd, p, len);
+
+    printf("[shell] writefd result: ");
+    printf("%d\n", n);
+}
+
+static void handle_readfd_command(char *cmd) {
+    char *p = cmd + 7;
+    char buf[256];
+
+    while (*p == ' ') p++;
+
+    int fd = atoi(p);
+
+    while (*p != '\0' && *p != ' ') p++;
+    while (*p == ' ') p++;
+
+    int len = atoi(p);
+
+    if (len <= 0) {
+        printf("usage: readfd <fd> <len>\n");
+        return;
+    }
+
+    if (len > 255) {
+        len = 255;
+    }
+
+    int n = ramfs_read(fd, buf, len);
+
+    if (n >= 0) {
+        printf("[shell] readfd bytes: %d\n", n);
+        printf("[shell] readfd data : %s\n", buf);
+    }
+}
 
 void shell_start(void) {
     char cmd[CMD_BUF_SIZE];
 
     printf("[MiniOS] shell start\n");
     printf("[MiniOS] hint: type 'help' for available commands\n");
+
+    userprog_init();
 
     while (1) {
         printf("MiniOS> ");
@@ -213,14 +280,38 @@ void shell_start(void) {
                 printf("[shell] fork failed\n");
         }
         else if (strncmp(cmd, "exec ", 5) == 0) {
-            char *name = cmd + 5;
-            while (*name == ' ') name++;
-            printf("[shell] exec '%s'...\n", name);
-            process_exec(name);
-            printf("[shell] exec done, current=%s (pid=%d)\n",
-                   process_get_current()->name,
-                   process_get_current_pid());
+    char *line = cmd + 5;
+
+    while (*line == ' ') {
+        line++;
+    }
+
+    if (*line == '\0') {
+        printf("usage: exec <app> [args]\n");
+    } else {
+        userprog_exec_cmd(line);
+    }
+}
+    else if (strncmp(cmd, "pexec ", 6) == 0) {
+        char *name = cmd + 6;
+
+        while (*name == ' ') {
+         name++;
         }
+
+        printf("[shell] process_exec '%s'...\n", name);
+        process_exec(name);
+        printf("[shell] process_exec done, current=%s (pid=%d)\n",
+           process_get_current()->name,
+           process_get_current_pid());
+        }   
+        else if (strcmp(cmd, "apps") == 0) {
+            userprog_list();
+        }
+        else if (strcmp(cmd, "apptest") == 0) {
+            userprog_apptest();
+        }
+
         else if (strcmp(cmd, "wait") == 0) {
             printf("[shell] waiting for child...\n");
             int child = process_wait(NULL);
@@ -307,6 +398,11 @@ void shell_start(void) {
         else if (strcmp(cmd, "ls") == 0) {
             ramfs_list_files();
         }
+        else if (strncmp(cmd, "ls ", 3) == 0) {
+            char *path = cmd + 3;
+            while (*path == ' ') path++;
+            ramfs_list_path(path);
+        }
         else if (strncmp(cmd, "cat ", 4) == 0) {
             char *filename = cmd + 4;
             while (*filename == ' ') filename++;
@@ -325,6 +421,60 @@ void shell_start(void) {
             while (*filename == ' ') filename++;
             ramfs_delete_file(filename);
         }
+        else if (strncmp(cmd, "mkdir ", 6) == 0) {
+            char *dirname = cmd + 6;
+            while (*dirname == ' ') dirname++;
+            ramfs_mkdir(dirname);
+        }
+        else if (strncmp(cmd, "cd ", 3) == 0) {
+            char *dirname = cmd + 3;
+            while (*dirname == ' ') dirname++;
+            ramfs_chdir(dirname);
+        }
+        else if (strcmp(cmd, "pwd") == 0) {
+            ramfs_pwd();
+        }
+        else if (strcmp(cmd, "mkfs") == 0) {
+            ramfs_format();
+            userprog_init();
+            printf("[shell] RAMFS formatted and MiniExec apps reinstalled\n");
+        }
+
+        else if (strcmp(cmd, "fsinfo") == 0) {
+            ramfs_print_info();
+        }
+        else if (strncmp(cmd, "open ", 5) == 0) {
+            char *filename = cmd + 5;
+            while (*filename == ' ') filename++;
+            int fd = ramfs_open(filename, RAMFS_O_RDWR);
+            printf("[shell] fd = %d\n", fd);
+        }
+        else if (strncmp(cmd, "close ", 6) == 0) {
+            int fd = atoi(cmd + 6);
+            ramfs_close(fd);
+        }
+        else if (strncmp(cmd, "seek ", 5) == 0) {
+            char *p = cmd + 5;
+            while (*p == ' ') p++;
+
+            int fd = atoi(p);
+
+            while (*p != '\0' && *p != ' ') p++;
+            while (*p == ' ') p++;
+
+            int offset = atoi(p);
+            ramfs_seek(fd, offset);
+        }
+        else if (strncmp(cmd, "readfd ", 7) == 0) {
+            handle_readfd_command(cmd);
+        }
+        else if (strncmp(cmd, "writefd ", 8) == 0) {
+            handle_writefd_command(cmd);
+        }
+        else if (strcmp(cmd, "fdtest") == 0) {
+            ramfs_fdtest();
+        }
+
         else if (strcmp(cmd, "fsinfo") == 0) {
             ramfs_print_info();
         }
