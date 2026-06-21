@@ -14,6 +14,7 @@ gcc -Iinclude `
     kernel/ramfs.c `
     kernel/shell.c `
     kernel/test.c `
+    kernel/userprog.c `
     -o minios.exe -Wall -Wextra -std=c11
 
 if ($?) { ./minios.exe }

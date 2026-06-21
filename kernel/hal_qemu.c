@@ -15,6 +15,42 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include "hal.h"
+/*
+ * Shell output capture (for > / >> / | pipe)
+ */
+int   hal_cap_on = 0;
+char *hal_cap_buf = 0;
+int   hal_cap_sz  = 0;
+int   hal_cap_n   = 0;
+
+void hal_capture_start(char *buf, int size) {
+    hal_cap_on = 1;
+    hal_cap_buf = buf;
+    hal_cap_sz  = size;
+    hal_cap_n   = 0;
+    if (buf && size > 0) buf[0] = 0;
+}
+
+int hal_capture_stop(void) {
+    hal_cap_on = 0;
+    if (hal_cap_buf && hal_cap_n < hal_cap_sz)
+        hal_cap_buf[hal_cap_n] = 0;
+    return hal_cap_n;
+}
+
+/*
+ * Shell input redirect (for <)
+ */
+const char *hal_input_buf = 0;
+int         hal_input_len = 0;
+int         hal_input_pos = 0;
+
+int hal_input_getc(void) {
+    if (!hal_input_buf || hal_input_pos >= hal_input_len) return -1;
+    return (unsigned char)hal_input_buf[hal_input_pos++];
+}
+
+
 
 /* ═══════════════════════════════════════════════════════════════
  *  VGA 文本模式驱动
@@ -88,6 +124,13 @@ static void serial_putchar(char c) {
 
 int hal_putchar(int c) {
     /* 同时输出到 VGA 和串口 */
+    /* Capture mode: write to buffer, skip terminal */
+    if (hal_cap_on && hal_cap_buf) {
+        if (hal_cap_n < hal_cap_sz - 1)
+            hal_cap_buf[hal_cap_n++] = (char)c;
+        return (unsigned char)c;
+    }
+    
     serial_putchar((char)c);
 
     if (c == '\n') {

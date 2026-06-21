@@ -160,6 +160,90 @@ static void handle_readfd_command(char *cmd) {
     }
 }
 
+/* ================================================================ */
+/*  Shell redirect & pipe helpers                                   */
+/* ================================================================ */
+
+static int shell_run_cmd(char *cmd);
+
+static void shell_redirect_out(char *cmd, int append) {
+    char *op = append ? strstr(cmd, ">>") : strchr(cmd, '>');
+    char cap_buf[4096];
+    char *file, *end;
+    if (!op) return;
+    *op = 0;
+    file = op + (append ? 2 : 1);
+    while (*file == ' ') file++;
+    end = cmd + strlen(cmd) - 1;
+    while (end >= cmd && *end == ' ') { *end = 0; end--; }
+    if (strlen(cmd) == 0 || strlen(file) == 0) {
+        printf("usage: command > file\n");
+        return;
+    }
+    printf("[shell] redirect '%s' > '%s'%s\n", cmd, file,
+           append ? " (append)" : "");
+    hal_capture_start(cap_buf, sizeof(cap_buf));
+    shell_run_cmd(cmd);
+    hal_capture_stop();
+    if (append) {
+        char old[65536];
+        int old_len = ramfs_read_file(file, old, 65534);
+        int cap_len;
+        if (old_len < 0) {
+            /* file doesn't exist: create new */
+            old_len = 0;
+            ramfs_create_file(file);
+        }
+        old[old_len] = 0;
+        cap_len = strlen(cap_buf);
+        if (old_len + cap_len >= 65535) cap_len = 65535 - old_len;
+        if (cap_len > 0) { memcpy(old + old_len, cap_buf, cap_len); old[old_len + cap_len] = 0; }
+        ramfs_write_file(file, old);
+    } else {
+        ramfs_create_file(file);  /* auto-create, ignore "exists" error */
+        ramfs_write_file(file, cap_buf);
+    }
+}
+
+static void shell_redirect_in(char *cmd) {
+    char *op = strchr(cmd, '<');
+    char *file;
+    char buf[4096];
+    int len;
+    if (!op) return;
+    *op = 0;
+    file = op + 1;
+    while (*file == ' ') file++;
+    len = ramfs_read_file(file, buf, sizeof(buf) - 1);
+    if (len < 0) {
+        printf("[shell] cannot read file: %s\n", file);
+        return;
+    }
+    buf[len] = 0;
+    printf("[shell] redirect '%s' < '%s' (%d bytes)\n", cmd, file, len);
+    if (strcmp(cmd, "cat") == 0 || strcmp(cmd, "") == 0)
+        printf("%s\n", buf);
+    else
+        printf("[shell] input %d bytes: %s\n", len, buf);
+}
+
+static void shell_handle_pipe(char *cmd) {
+    char *op = strchr(cmd, '|');
+    char cap_buf[4096];
+    char *right;
+    if (!op) return;
+    *op = 0;
+    right = op + 1;
+    while (*right == ' ') right++;
+    /* trim trailing spaces from left side */
+    { char *e = cmd + strlen(cmd) - 1; while (e >= cmd && *e == ' ') *e-- = 0; }
+    printf("[shell] pipe '%s' | '%s'\n", cmd, right);
+    hal_capture_start(cap_buf, sizeof(cap_buf));
+    shell_run_cmd(cmd);
+    hal_capture_stop();
+    printf("[shell] pipe result (%d bytes): %s\n", (int)strlen(cap_buf), cap_buf);
+}
+
 void shell_start(void) {
     char cmd[CMD_BUF_SIZE];
 
@@ -181,8 +265,19 @@ void shell_start(void) {
 
         /* ---- 命令分发 ---- */
 
+        /* ---- redirect / pipe pre-check ---- */
+        if (strstr(cmd, ">>")) { shell_redirect_out(cmd, 1); continue; }
+        if (strchr(cmd, '>'))  { shell_redirect_out(cmd, 0); continue; }
+        if (strchr(cmd, '<'))  { shell_redirect_in(cmd);      continue; }
+        if (strchr(cmd, '|'))  { shell_handle_pipe(cmd);       continue; }
+
+        if (shell_run_cmd(cmd)) break;
+    }
+}
+/* ---- command dispatch function ---- */
+static int shell_run_cmd(char *cmd) {
         if (strcmp(cmd, "") == 0) {
-            continue;
+            return 0;
         }
         else if (strcmp(cmd, "help") == 0) {
             shell_help();
@@ -489,10 +584,11 @@ void shell_start(void) {
         }
         else if (strcmp(cmd, "exit") == 0) {
             printf("[MiniOS] exit shell\n");
-            break;
+            return 1;
         }
         else {
             printf("unknown command: %s\n", cmd);
         }
-    }
+    return 0;
 }
+

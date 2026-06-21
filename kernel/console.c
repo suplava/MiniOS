@@ -39,8 +39,21 @@ static int serial_received(void) {
     return inb(COM1_PORT + 5) & 0x01;
 }
 
+	/* Shell capture support (defined in hal_qemu.c) */
+	extern int   hal_cap_on;
+	extern char *hal_cap_buf;
+	extern int   hal_cap_sz;
+	extern int   hal_cap_n;
+
 static void serial_putchar(char c) {
     if (c == '\n') {
+	/* Capture mode: skip terminal, write to buffer */
+	if (hal_cap_on && hal_cap_buf) {
+		if (c != '\r' && hal_cap_n < hal_cap_sz - 1)
+			hal_cap_buf[hal_cap_n++] = c;
+		return;
+	}
+
         serial_putchar('\r');
     }
 
@@ -131,6 +144,37 @@ void print_line(const char *str) {
 #include <windows.h>
 #endif
 
+
+	/* shell capture support for local mode */
+	int   hal_cap_on = 0;
+	char *hal_cap_buf = 0;
+	int   hal_cap_sz  = 0;
+	int   hal_cap_n   = 0;
+
+	void hal_capture_start(char *buf, int size) {
+	    hal_cap_on = 1;
+	    hal_cap_buf = buf;
+	    hal_cap_sz  = size;
+	    hal_cap_n   = 0;
+	    if (buf && size > 0) buf[0] = 0;
+	}
+
+	int hal_capture_stop(void) {
+	    hal_cap_on = 0;
+	    if (hal_cap_buf && hal_cap_n < hal_cap_sz)
+	        hal_cap_buf[hal_cap_n] = 0;
+	    return hal_cap_n;
+	}
+
+	const char *hal_input_buf = 0;
+	int         hal_input_len = 0;
+	int         hal_input_pos = 0;
+
+	int hal_input_getc(void) {
+	    if (!hal_input_buf || hal_input_pos >= hal_input_len) return -1;
+	    return (unsigned char)hal_input_buf[hal_input_pos++];
+	}
+
 void console_init(void) {
 #ifdef _WIN32
     SetConsoleOutputCP(CP_UTF8);
@@ -156,26 +200,52 @@ char console_getchar(void) {
 }
 
 void printk(const char *str) {
-    if (str == 0) {
+    if (str == 0) return;
+
+    if (hal_cap_on && hal_cap_buf) {
+        int len = strlen(str);
+        if (hal_cap_n + len >= hal_cap_sz) len = hal_cap_sz - hal_cap_n - 1;
+        if (len > 0) { memcpy(hal_cap_buf + hal_cap_n, str, len); hal_cap_n += len; }
         return;
     }
-
     printf("%s", str);
     fflush(stdout);
 }
 
 void print_int(int num) {
+    if (hal_cap_on && hal_cap_buf) {
+        char tmp[16];
+        int n = snprintf(tmp, sizeof(tmp), "%d", num);
+        if (n > 0 && hal_cap_n + n < hal_cap_sz) {
+            memcpy(hal_cap_buf + hal_cap_n, tmp, n);
+            hal_cap_n += n;
+        }
+        return;
+    }
     printf("%d", num);
     fflush(stdout);
 }
 
 void print_line(const char *str) {
+    if (hal_cap_on && hal_cap_buf) {
+        if (str != 0) {
+            int len = strlen(str);
+            if (hal_cap_n + len + 1 < hal_cap_sz) {
+                memcpy(hal_cap_buf + hal_cap_n, str, len);
+                hal_cap_n += len;
+                hal_cap_buf[hal_cap_n++] = '\n';
+            }
+        } else {
+            if (hal_cap_n < hal_cap_sz - 1)
+                hal_cap_buf[hal_cap_n++] = '\n';
+        }
+        return;
+    }
     if (str == 0) {
         printf("\n");
     } else {
         printf("%s\n", str);
     }
-
     fflush(stdout);
 }
 

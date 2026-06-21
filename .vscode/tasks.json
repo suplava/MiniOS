@@ -4,7 +4,7 @@
         {
             "label": "build MiniOS",
             "type": "shell",
-            "command": "gcc -Wall -Wextra -g3 -Iinclude kernel/main.c kernel/console.c kernel/trap.c kernel/timer.c kernel/syscall.c kernel/memory.c kernel/process.c kernel/ramfs.c kernel/shell.c kernel/sched.c kernel/test.c -o minios.exe && echo Build OK",
+            "command": "gcc -Wall -Wextra -g3 -Iinclude kernel/main.c kernel/console.c kernel/trap.c kernel/timer.c kernel/syscall.c kernel/memory.c kernel/process.c kernel/sched.c kernel/sync.c kernel/ramfs.c kernel/shell.c kernel/test.c kernel/userprog.c -o minios.exe && echo Build OK",
             "options": {
                 "cwd": "${workspaceFolder}"
             },

@@ -63,6 +63,20 @@ void vga_init(void);
 /* ── 键盘 ── */
 void kbd_readline(char *buf, int max);
 
+/* ── Shell 输出捕获 (用于 > / >> / | 重定向与管道) ── */
+extern int   hal_cap_on;
+extern char *hal_cap_buf;
+extern int   hal_cap_sz;
+extern int   hal_cap_n;
+void hal_capture_start(char *buf, int size);
+int  hal_capture_stop(void);
+
+/* ── Shell 输入重定向 (用于 <) ── */
+extern const char *hal_input_buf;
+extern int         hal_input_len;
+extern int         hal_input_pos;
+int  hal_input_getc(void);
+
 /* ── 公共工具 (QEMU 版是真实函数) ── */
 void hal_print(const char *s);
 void hal_println(const char *s);
@@ -77,8 +91,42 @@ void hal_println(const char *s);
 #include <string.h>
 #include <time.h>
 
-/* 键盘输入直接走 stdin */
+/* keyboard input */
 #define kbd_readline(buf, max)  (void)(max); fgets(buf, max, stdin)
+
+/* output capture (real impl for local mode) */
+#include <stdarg.h>
+extern int   hal_cap_on;
+extern char *hal_cap_buf;
+extern int   hal_cap_sz;
+extern int   hal_cap_n;
+void hal_capture_start(char *buf, int size);
+int  hal_capture_stop(void);
+
+extern const char *hal_input_buf;
+extern int         hal_input_len;
+extern int         hal_input_pos;
+int  hal_input_getc(void);
+
+/* printf override for capture */
+static inline int __hal_local_cap_printf(const char *fmt, ...) {
+    va_list ap; int ret;
+    if (hal_cap_on && hal_cap_buf) {
+        va_start(ap, fmt);
+        int n = vsnprintf(hal_cap_buf + hal_cap_n,
+                          hal_cap_sz - hal_cap_n, fmt, ap);
+        va_end(ap);
+        if (n > 0) hal_cap_n += n;
+        if (hal_cap_n >= hal_cap_sz) hal_cap_n = hal_cap_sz - 1;
+        return n;
+    }
+    va_start(ap, fmt);
+    ret = vfprintf(stdout, fmt, ap);
+    va_end(ap);
+    fflush(stdout);
+    return ret;
+}
+#define printf(...)  __hal_local_cap_printf(__VA_ARGS__)
 
 /* hal_print / hal_println */
 #define hal_print(s)     printf("%s", s)
