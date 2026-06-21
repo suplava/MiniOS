@@ -79,6 +79,34 @@ static void shell_help(void) {
     printf("  syscall              simulate syscall\n");
     printf("  exit                 exit MiniOS\n");
 }
+static char *shell_strstr(char *s, const char *sub) {
+    int i;
+    int j;
+
+    if (s == NULL || sub == NULL) {
+        return NULL;
+    }
+
+    if (sub[0] == '\0') {
+        return s;
+    }
+
+    for (i = 0; s[i] != '\0'; i++) {
+        j = 0;
+
+        while (s[i + j] != '\0' &&
+               sub[j] != '\0' &&
+               s[i + j] == sub[j]) {
+            j++;
+        }
+
+        if (sub[j] == '\0') {
+            return s + i;
+        }
+    }
+
+    return NULL;
+}
 
 static void handle_write_command(char *cmd) {
     char *filename = cmd + 6;
@@ -167,7 +195,7 @@ static void handle_readfd_command(char *cmd) {
 static int shell_run_cmd(char *cmd);
 
 static void shell_redirect_out(char *cmd, int append) {
-    char *op = append ? strstr(cmd, ">>") : strchr(cmd, '>');
+    char *op = append ? shell_strstr(cmd, ">>") : strchr(cmd, '>');
     char cap_buf[4096];
     char *file, *end;
     if (!op) return;
@@ -266,7 +294,7 @@ void shell_start(void) {
         /* ---- 命令分发 ---- */
 
         /* ---- redirect / pipe pre-check ---- */
-        if (strstr(cmd, ">>")) { shell_redirect_out(cmd, 1); continue; }
+        if (shell_strstr(cmd, ">>")) { shell_redirect_out(cmd, 1); continue; }
         if (strchr(cmd, '>'))  { shell_redirect_out(cmd, 0); continue; }
         if (strchr(cmd, '<'))  { shell_redirect_in(cmd);      continue; }
         if (strchr(cmd, '|'))  { shell_handle_pipe(cmd);       continue; }
@@ -500,9 +528,21 @@ static int shell_run_cmd(char *cmd) {
         }
         else if (strncmp(cmd, "cat ", 4) == 0) {
             char *filename = cmd + 4;
-            while (*filename == ' ') filename++;
-            ramfs_print_file(filename);
+            char buf[1024];
+            int n;
+
+        while (*filename == ' ') {
+                filename++;
         }
+
+            n = ramfs_read_file(filename, buf, sizeof(buf) - 1);
+
+        if (n >= 0) {
+            buf[n] = '\0';
+            printf("%s\n", buf);
+        }
+}
+
         else if (strncmp(cmd, "touch ", 6) == 0) {
             char *filename = cmd + 6;
             while (*filename == ' ') filename++;
